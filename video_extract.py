@@ -2,70 +2,43 @@ import sys
 import numpy as np
 import time
 import cv2
-from imutils.object_detection import non_max_suppression
-from imutils import paths
-import imutils
 from os import listdir
 from os.path import isfile, join
 
+N = 5
+
 PATH = 'UCSD_Anomaly_Dataset.v1p2/UCSDped1/Test/Test001/'
-hog = cv2.HOGDescriptor()
-hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 files = [f for f in listdir(PATH) if isfile(join(PATH, f))]
 files.remove('.DS_Store')
 files.remove('._.DS_Store')
 files.sort()
-first_frame = cv2.imread(PATH + files[0])
-first_frame = imutils.resize(first_frame, width=500)
+fgbg = cv2.createBackgroundSubtractorMOG2()
+all_ceils = []
+number_frame = 0
 for one_file in files:
+    print number_frame
     frame = cv2.imread(PATH + one_file)
-    # resize the frame, convert it to grayscale, and blur it
-    frame = imutils.resize(frame, width=500)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (21, 21), 0)
+    fgmask = fgbg.apply(frame)
+    width = fgmask.shape[0]
+    height = fgmask.shape[1]
+    #for i in fgmask:
+    #    if np.any(fgmasik)
+    ceils = [[0 for x in range(height/N)] for y in range(width/N)]
+    # print width/N
+    for i in range(width/N):
+        for j in range(height/N):
+            if not np.all(fgmask[i:i+N,j:j+N] == 127):
+                ceils[i][j] = fgmask[i:i+N,j:j+N]
+                # import pdb; pdb.set_trace()
+    all_ceils.append(ceils)
+    # import pdb; pdb.set_trace()
+    cv2.imshow('frame', fgmask)
+    number_frame += 1
+    # cv2.waitKey(0)
+    if number_frame == len(files):
+        import pdb; pdb.set_trace()
+    k = cv2.waitKey(30) & 0xff
+    if k == 27:
+        break
 
-    # compute the absolute difference between the current frame and
-    # first frame
-    frameDelta = cv2.absdiff(first_frame, gray)
-    thresh = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]
-
-    # dilate the thresholded image to fill in holes, then find contours
-    # on thresholded image
-    thresh = cv2.dilate(thresh, None, iterations=2)
-    (cnts, _) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
-    	cv2.CHAIN_APPROX_SIMPLE)
-
-    # loop over the contours
-    for c in cnts:
-    	# if the contour is too small, ignore it
-    	if cv2.contourArea(c) < args["min_area"]:
-    		continue
-
-    	# compute the bounding box for the contour, draw it on the frame,
-    	# and update the text
-    	(x, y, w, h) = cv2.boundingRect(c)
-    	cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    	text = "Occupied"
-
-    # draw the text and timestamp on the frame
-    cv2.putText(frame, "Room Status: {}".format(text), (10, 20),
-    	cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-    cv2.putText(frame, datetime.datetime.now().strftime("%A %d %B %Y %I:%M:%S%p"),
-    	(10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
-
-    # show the frame and record if the user presses a key
-    cv2.imshow("Security Feed", frame)
-    cv2.imshow("Thresh", thresh)
-    cv2.imshow("Frame Delta", frameDelta)
-    key = cv2.waitKey(1) & 0xFF
-
-    # if the `q` key is pressed, break from the lop
-    if key == ord("q"):
-    	break
-
-
-    # show the output images
-    # cv2.imshow("Before NMS", orig)
-    # cv2.imshow("After NMS", image)
-    cv2.waitKey(0)
-    # print one_file
+cv2.destroyAllWindows()

@@ -53,7 +53,7 @@ for one_file in files:
             if np.any(fgmask[i:i+N,j:j+N] == 255):
                 ceils[i/N][j/N] = fgmask[i:i+N,j:j+N]
                 if number_frame % DETECT_INTERVAL == 0:
-                    print len(tracks)
+                    # print len(tracks)
                     # if number_frame == 2*DETECT_INTERVAL:
                         # import pdb; pdb.set_trace()
                     to_add= True
@@ -81,7 +81,7 @@ for one_file in files:
                 del tr[0]
             new_tracks.append(tr)
         tracks = new_tracks
-        print len(tracks)
+        # print len(tracks)
         for tr in tracks:
             if len(tr) > 1:
                 if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
@@ -119,7 +119,7 @@ for i in range(len(mots)):
         divide += 1
     avgMots[i] = (np.array(avgMots[i], dtype='f')/divide).tolist()
     for speedArray in avgMots[i]:
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         kde = gaussian_kde(speedArray).pdf(range(len(speedArray)))
         pmfs.append(pmf.Pmf(kde))
         # pmfSpeed = pmfSpeed.__add__(pmf.Pmf(speedArray))

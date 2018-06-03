@@ -19,6 +19,10 @@ class Pmf(Counter):
 
         returns: new Pmf
         """
+        if self.items() == []:
+            return other
+        if other.items() == []:
+            return self
         pmf = Pmf()
         for key1, prob1 in self.items():
             for key2, prob2 in other.items():

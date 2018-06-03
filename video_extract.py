@@ -2,126 +2,124 @@ import sys
 import numpy as np
 import time
 import cv2
-import pmf as pmf
+# import pmf as pmf
 from os import listdir
 from os.path import isfile, join
 from scipy.stats.kde import gaussian_kde
+import scipy.stats  as stats
 
 # https://github.com/opencv/opencv/blob/master/samples/python/lk_track.py
-
-def remove_duplicates(l):
-    return list(set(l))
 
 def draw_str(dst, target, s):
     x, y = target
     cv2.putText(dst, s, (x+1, y+1), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), thickness = 2, lineType=cv2.LINE_AA)
     cv2.putText(dst, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.LINE_AA)
-
-DETECT_INTERVAL = 10
-N = 16
+#
+# DETECT_INTERVAL = 10
+# N = 16
 lk_params = dict( winSize  = (15,15),
                   maxLevel = 2,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+class UCSDTrain:
+    def __init__(self, path, n, detect_interval):
+        self.path = path
+        self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
+        self.tracks = []
+        self.mots = []
+        self.tracks_ceils_id = []
+        self.mots = []
+        self.n = n
+        self.detect_interval = detect_interval
 
-PATH = 'UCSD_Anomaly_Dataset.v1p2/UCSDped1/Test/Test001/'
-files = [f for f in listdir(PATH) if isfile(join(PATH, f))]
-files.remove('.DS_Store')
-files.remove('._.DS_Store')
-files.sort()
-fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
-all_ceils = []
-old_frame = None
-tracks = []
-movement = 0
-number_frame = 0
+    def create_cells(self, fgmask, width, height):
+        ceils = [[None for x in range(height/self.n + 1)] for y in range(width/self.n + 1)]
+        for i in range(0, width, self.n):
+            for j in range(0, height, self.n):
+                if np.any(fgmask[i:i+self.n,j:j+self.n] == 255):
+                    # There is white in the mask
+                    ceils[i/self.n][j/self.n] = fgmask[i:i+self.n,j:j+self.n]
+                    toAdd = True
+                    for tr in self.tracks:
+                        if int(tr[-1][0]) <= i+self.n and int(tr[-1][0]) >= i and int(tr[-1][1]) <= j+self.n  and int(tr[-1][1]) >= j:
+                            toAdd = False
+                            break
+                    # if toAdd and not (i/self.n, j/self.n) in self.tracks_ceils_id:
+                    if toAdd:
+                        self.tracks.append([(i+self.n/2, j+self.n/2)])
+                        self.tracks_ceils_id.append((i/self.n, j/self.n))
+        return ceils
 
-mots = []
-tracks_ceils_id = []
+    def learn_one_video(self, video_name):
+        files = [f for f in listdir(self.path+video_name) if isfile(join(self.path+video_name, f))]
+        files.remove('.DS_Store')
+        files.remove('._.DS_Store')
+        files.sort()
+        number_frame = 0
+        old_frame = None
+        for tif in files:
+            frame = cv2.imread(self.path + video_name + tif)
+            fgmask = self.fgbg.apply(frame)
+            width = fgmask.shape[0]
+            height = fgmask.shape[1]
+            frameCopy = frame.copy()
 
-pmfSpeed = pmf.Pmf()
-avgMots = []
-for one_file in files:
-    frame = cv2.imread(PATH + one_file)
-    fgmask = fgbg.apply(frame)
-    width = fgmask.shape[0]
-    height = fgmask.shape[1]
-    vis = frame.copy()
-    ceils = [[None for x in range(height/N + 1)] for y in range(width/N + 1)]
-    mot = [[0 for x in range(height/N + 1)] for y in range(width/N + 1)]
-    for i in range(0, width, N):
-        for j in range(0, height, N):
-            if np.any(fgmask[i:i+N,j:j+N] == 255):
-                ceils[i/N][j/N] = fgmask[i:i+N,j:j+N]
-                if number_frame % DETECT_INTERVAL == 0:
-                    # print len(tracks)
-                    # if number_frame == 2*DETECT_INTERVAL:
-                        # import pdb; pdb.set_trace()
-                    to_add= True
-                    for tr in tracks:
-                        if int(tr[-1][0]) <= i+N and int(tr[-1][0]) >= i and int(tr[-1][1]) <= j+N  and int(tr[-1][1]) >= j:
-                            to_add = False
-                            # print "a"
+            mot = [[0 for x in range(height/self.n + 1)] for y in range(width/self.n + 1)]
+            # if number_frame % self.detect_interval == 0:
+            #     self.tracks = []
+            #     self.tracks_ceils_id = []
+            ceils = self.create_cells(fgmask, width, height)
+            if len(self.tracks) > 0 and number_frame % self.detect_interval:
+                p0 = np.float32([tr[-1] for tr in self.tracks]).reshape(-1, 1, 2)
+                p1, _st, _err = cv2.calcOpticalFlowPyrLK(fgmask, old_frame, p0, None, **lk_params)
+                p0r, _st, _err = cv2.calcOpticalFlowPyrLK(old_frame, fgmask, p1, None, **lk_params)
+                d = abs(p0-p0r).reshape(-1, 2).max(-1)
+                good = d < 1
+                new_tracks = []
+                for tr, (x, y), good_flag in zip(self.tracks, p1.reshape(-1, 2), good):
+                    if not good_flag:
+                        continue
+                    if not (x, y) == tr[-1]:
+                        tr.append((x, y))
+                        if len(tr) > 10:
+                            del tr[0]
+                        new_tracks.append(tr)
+                        self.tracks = new_tracks
+                        movement = 0
+                        for tr in self.tracks:
+                            if len(tr) > 1:
+                                if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
+                                    x, y = self.tracks_ceils_id[self.tracks.index(tr)]
+                                    mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
+                                    cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
+                                    self.mots.append(mot)
+                                    movement += 1
 
-                    if to_add and not [(i+N/2, j+N/2)] in tracks:
-                        tracks.append([(i+N/2, j+N/2)])
-                        tracks_ceils_id.append((i/N, j/N))
-    if len(tracks) > 0 and number_frame % DETECT_INTERVAL:
-        p0 = np.float32([tr[-1] for tr in tracks]).reshape(-1, 1, 2)
-        p1, _st, _err = cv2.calcOpticalFlowPyrLK(fgmask, old_frame, p0, None, **lk_params)
-        p0r, _st, _err = cv2.calcOpticalFlowPyrLK(old_frame, fgmask, p1, None, **lk_params)
-        d = abs(p0-p0r).reshape(-1, 2).max(-1)
-        good = d < 1
-        new_tracks = []
-        for tr, (x, y), good_flag in zip(tracks, p1.reshape(-1, 2), good):
-            if not good_flag:
-                continue
-            if not (x, y) == tr[-1]:
-                tr.append((x, y))
-            if len(tr) > 10:
-                del tr[0]
-            new_tracks.append(tr)
-        tracks = new_tracks
-        # print len(tracks)
-        for tr in tracks:
-            if len(tr) > 1:
-                if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
-                    movement += 1
-                    # import pdb; pdb.set_trace()
-                    x, y = tracks_ceils_id[tracks.index(tr)]
-                    mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
-                    cv2.circle(vis, (tr[-1][1], tr[-1][0]), N, (0, 255, 0))
-        # import pdb; pdb.set_trace()
+                                    draw_str(frameCopy, (20, 20), 'movement detected: %d' % movement)
+            cv2.imshow('frame', frameCopy)
+            number_frame += 1
+            old_frame = fgmask
+            k = cv2.waitKey(30) & 0xff
+            if k == 27:
+                break
+        cv2.destroyAllWindows()
+# PATH = 'UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train001/'
 
-        # print number_frame
-        mots.append(mot)
+if __name__ == '__main__':
+    ucsd_training = UCSDTrain('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)
+    ucsd_training.learn_one_video('Train001/')
 
-        draw_str(vis, (20, 20), 'movement detected: %d' % movement)
-        movement = 0
-
-    cv2.imshow('frame', vis)
-    number_frame += 1
-    old_frame = fgmask
-    k = cv2.waitKey(30) & 0xff
-    if k == 27:
-        break
-
-cv2.destroyAllWindows()
-
-pmfs = []
-for i in range(len(mots)):
-    avgMots.append(mots[i])
-    divide = 1.0
-    if i > 0:
-        avgMots[i] += mots[i-1]
-        divide += 1
-    if i < len(mots) - 1:
-        avgMots[i] += mots[i+1]
-        divide += 1
-    avgMots[i] = (np.array(avgMots[i], dtype='f')/divide).tolist()
-    for speedArray in avgMots[i]:
-        # import pdb; pdb.set_trace()
-        kde = gaussian_kde(speedArray).pdf(range(len(speedArray)))
-        pmfs.append(pmf.Pmf(kde))
-        # pmfSpeed = pmfSpeed.__add__(pmf.Pmf(speedArray))
-
-# import pdb; pdb.set_trace()
+#
+# # pmfs = []
+# for i in range(len(mots)):
+#     avgMots.append(mots[i])
+#     divide = 1.0
+#     if i > 0:
+#         avgMots[i] += mots[i-1]
+#         divide += 1
+#     if i < len(mots) - 1:
+#         avgMots[i] += mots[i+1]
+#         divide += 1
+#     avgMots[i] = (np.array(avgMots[i], dtype='f')/divide).tolist()
+#     # print i
+#     for speedArray in avgMots[i]:
+#         pass

@@ -2,21 +2,16 @@ import sys
 import numpy as np
 import time
 import cv2
-# import pmf as pmf
 from os import listdir
 from os.path import isfile, join
 from scipy.stats.kde import gaussian_kde
 import scipy.stats  as stats
 
-# https://github.com/opencv/opencv/blob/master/samples/python/lk_track.py
-
 def draw_str(dst, target, s):
     x, y = target
     cv2.putText(dst, s, (x+1, y+1), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), thickness = 2, lineType=cv2.LINE_AA)
     cv2.putText(dst, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.LINE_AA)
-#
-# DETECT_INTERVAL = 10
-# N = 16
+
 lk_params = dict( winSize  = (15,15),
                   maxLevel = 2,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
@@ -25,11 +20,10 @@ class UCSDTrain:
         self.path = path
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.tracks = []
-        self.mots = []
         self.tracks_ceils_id = []
-        self.mots = []
         self.n = n
         self.detect_interval = detect_interval
+        self.data = []
 
     def create_cells(self, fgmask, width, height):
         ceils = [[None for x in range(height/self.n + 1)] for y in range(width/self.n + 1)]
@@ -43,11 +37,17 @@ class UCSDTrain:
                         if int(tr[-1][0]) <= i+self.n and int(tr[-1][0]) >= i and int(tr[-1][1]) <= j+self.n  and int(tr[-1][1]) >= j:
                             toAdd = False
                             break
-                    # if toAdd and not (i/self.n, j/self.n) in self.tracks_ceils_id:
                     if toAdd:
                         self.tracks.append([(i+self.n/2, j+self.n/2)])
                         self.tracks_ceils_id.append((i/self.n, j/self.n))
         return ceils
+
+    def save_data(self, mots):
+        j = 0
+        for i in range(1, len(mots), 3):
+            self.data.append(mots[i]+mots[i-1]+mots[i+1])
+            self.data[j] = (np.array(self.data[j], dtype='f')/3.0).tolist()
+            j += 1
 
     def learn_one_video(self, video_name):
         files = [f for f in listdir(self.path+video_name) if isfile(join(self.path+video_name, f))]
@@ -56,6 +56,7 @@ class UCSDTrain:
         files.sort()
         number_frame = 0
         old_frame = None
+        mots = []
         for tif in files:
             frame = cv2.imread(self.path + video_name + tif)
             fgmask = self.fgbg.apply(frame)
@@ -64,9 +65,9 @@ class UCSDTrain:
             frameCopy = frame.copy()
 
             mot = [[0 for x in range(height/self.n + 1)] for y in range(width/self.n + 1)]
-            # if number_frame % self.detect_interval == 0:
-            #     self.tracks = []
-            #     self.tracks_ceils_id = []
+            if number_frame % self.detect_interval == 0:
+                self.tracks = []
+                self.tracks_ceils_id = []
             ceils = self.create_cells(fgmask, width, height)
             if len(self.tracks) > 0 and number_frame % self.detect_interval:
                 p0 = np.float32([tr[-1] for tr in self.tracks]).reshape(-1, 1, 2)
@@ -91,7 +92,7 @@ class UCSDTrain:
                                     x, y = self.tracks_ceils_id[self.tracks.index(tr)]
                                     mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
                                     cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
-                                    self.mots.append(mot)
+                                    mots.append(mot)
                                     movement += 1
 
                                     draw_str(frameCopy, (20, 20), 'movement detected: %d' % movement)
@@ -102,7 +103,7 @@ class UCSDTrain:
             if k == 27:
                 break
         cv2.destroyAllWindows()
-# PATH = 'UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train001/'
+        self.save_data(mots)
 
 if __name__ == '__main__':
     ucsd_training = UCSDTrain('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)

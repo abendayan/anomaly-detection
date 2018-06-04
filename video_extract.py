@@ -6,6 +6,7 @@ from os import listdir
 from os.path import isfile, join
 from scipy.stats.kde import gaussian_kde
 import scipy.stats  as stats
+from scipy.stats import norm
 
 def draw_str(dst, target, s):
     x, y = target
@@ -15,6 +16,19 @@ def draw_str(dst, target, s):
 lk_params = dict( winSize  = (15,15),
                   maxLevel = 2,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+class Classifier:
+    def __init__(self, data):
+        self.train_classifier(data)
+
+    def train_classifier(self, data):
+        for cells in data:
+            mu, std = norm.fit(data)
+            import pdb; pdb.set_trace()
+            kde = gaussian_kde(mu, std)
+            # learn the classifier for all of the cells
+            import pdb; pdb.set_trace()
+            # pass
+
 class UCSDTrain:
     def __init__(self, path, n, detect_interval):
         self.path = path
@@ -109,6 +123,7 @@ if __name__ == '__main__':
     ucsd_training = UCSDTrain('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)
     ucsd_training.learn_one_video('Train001/')
 
+    # speedClassifier = Classifier(ucsd_training.data)
 #
 # # pmfs = []
 # for i in range(len(mots)):

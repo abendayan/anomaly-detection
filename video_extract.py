@@ -7,6 +7,9 @@ from os.path import isfile, join
 from scipy.stats.kde import gaussian_kde
 import scipy.stats  as stats
 from scipy.stats import norm
+from sklearn import svm
+import matplotlib.pyplot as plt
+import random
 
 def draw_str(dst, target, s):
     x, y = target
@@ -18,19 +21,40 @@ lk_params = dict( winSize  = (15,15),
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 class Classifier:
     def __init__(self, data):
+        self.T = 0.0
+        self.N = len(data)*len(data[0])*len(data[0][1])
+        self.T = 3.0
         self.train_classifier(data)
 
     def train_classifier(self, data):
+        rbf_svc = svm.OneClassSVM(kernel='rbf')
+        mu, std = norm.fit(data)
+        means = []
         for cells in data:
-            mu, std = norm.fit(data)
-            import pdb; pdb.set_trace()
-            kde = gaussian_kde(mu, std)
-            # learn the classifier for all of the cells
-            import pdb; pdb.set_trace()
-            # pass
+            prob = []
+            for cell in cells:
+                if not np.all(np.array(cell) == 0):
+                    density = gaussian_kde(cell)
+                    density.covariance_factor = lambda : .25
+                    density._compute_covariance()
+                    prob.append((density.pdf(range(len(cell))).sum())/(self.N))
+            if min(prob) < self.T:
+                self.T = min(prob)
+        print self.T
 
-class UCSDTrain:
-    def __init__(self, path, n, detect_interval):
+    def is_anomaly(self, data):
+        for cell in data:
+            if not np.all(np.array(cell) == 0):
+                density = gaussian_kde(cell)
+                density.covariance_factor = lambda : .25
+                density._compute_covariance()
+                if (density.pdf(range(len(cell))).sum())/(self.N) < self.T:
+                    return True
+        return False
+
+
+class UCSD:
+    def __init__(self, path, n, detect_interval, train = True):
         self.path = path
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.tracks = []
@@ -38,6 +62,7 @@ class UCSDTrain:
         self.n = n
         self.detect_interval = detect_interval
         self.data = []
+        self.train = train
 
     def create_cells(self, fgmask, width, height):
         ceils = [[None for x in range(height/self.n + 1)] for y in range(width/self.n + 1)]
@@ -59,19 +84,28 @@ class UCSDTrain:
     def save_data(self, mots):
         j = 0
         for i in range(1, len(mots), 3):
-            self.data.append(mots[i]+mots[i-1]+mots[i+1])
-            self.data[j] = (np.array(self.data[j], dtype='f')/3.0).tolist()
+        # for i in range(len(mots)):
+            if i+1 < len(mots):
+                nextOne = mots[i+1]
+                divide = 3.0
+            else:
+                divide = 2.0
+            self.data.append(mots[i])
+            self.data[j] = (np.array(self.data[j], dtype='f')/divide).tolist()
             j += 1
 
-    def learn_one_video(self, video_name):
+    def learn_one_video(self, video_name, classifier = None):
         files = [f for f in listdir(self.path+video_name) if isfile(join(self.path+video_name, f))]
-        files.remove('.DS_Store')
-        files.remove('._.DS_Store')
+        if '.DS_Store' in files:
+            files.remove('.DS_Store')
+        if '._.DS_Store' in files:
+            files.remove('._.DS_Store')
         files.sort()
         number_frame = 0
         old_frame = None
         mots = []
         for tif in files:
+            movement = 0
             frame = cv2.imread(self.path + video_name + tif)
             fgmask = self.fgbg.apply(frame)
             width = fgmask.shape[0]
@@ -99,17 +133,20 @@ class UCSDTrain:
                             del tr[0]
                         new_tracks.append(tr)
                         self.tracks = new_tracks
-                        movement = 0
-                        for tr in self.tracks:
-                            if len(tr) > 1:
-                                if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
-                                    x, y = self.tracks_ceils_id[self.tracks.index(tr)]
-                                    mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
-                                    cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
-                                    mots.append(mot)
-                                    movement += 1
 
-                                    draw_str(frameCopy, (20, 20), 'movement detected: %d' % movement)
+                        if len(tr) > 1:
+                            if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
+                                x, y = self.tracks_ceils_id[self.tracks.index(tr)]
+                                mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
+                                cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
+                                movement += 1
+
+                                draw_str(frameCopy, (20, 20), 'movement detected: %d' % movement)
+                mots.append(mot)
+                if not self.train:
+                    is_anomaly = speedClassifier.is_anomaly(mot)
+                    if is_anomaly:
+                        print number_frame, " is an anomaly"
             cv2.imshow('frame', frameCopy)
             number_frame += 1
             old_frame = fgmask
@@ -117,25 +154,14 @@ class UCSDTrain:
             if k == 27:
                 break
         cv2.destroyAllWindows()
-        self.save_data(mots)
+        if self.train:
+            self.save_data(mots)
 
 if __name__ == '__main__':
-    ucsd_training = UCSDTrain('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)
+    ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)
     ucsd_training.learn_one_video('Train001/')
 
-    # speedClassifier = Classifier(ucsd_training.data)
-#
-# # pmfs = []
-# for i in range(len(mots)):
-#     avgMots.append(mots[i])
-#     divide = 1.0
-#     if i > 0:
-#         avgMots[i] += mots[i-1]
-#         divide += 1
-#     if i < len(mots) - 1:
-#         avgMots[i] += mots[i+1]
-#         divide += 1
-#     avgMots[i] = (np.array(avgMots[i], dtype='f')/divide).tolist()
-#     # print i
-#     for speedArray in avgMots[i]:
-#         pass
+    speedClassifier = Classifier(ucsd_training.data)
+
+    ucsd_testing = UCSD('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Test/', 16, 10, False)
+    ucsd_testing.learn_one_video('Test001/', speedClassifier)

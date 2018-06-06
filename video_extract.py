@@ -38,19 +38,23 @@ class Classifier:
                     density.covariance_factor = lambda : .25
                     density._compute_covariance()
                     prob.append((density.pdf(range(len(cell))).sum())/(self.N))
-            if min(prob) < self.T:
-                self.T = min(prob)
+            if len(prob) > 0:
+                if min(prob) < self.T:
+                    self.T = min(prob)
         print self.T
 
-    def is_anomaly(self, data):
-        for cell in data:
+    def is_anomaly(self, cells):
+        anomaly = [False]*len(cells)
+        i = 0
+        for cell in cells:
             if not np.all(np.array(cell) == 0):
                 density = gaussian_kde(cell)
                 density.covariance_factor = lambda : .25
                 density._compute_covariance()
                 if (density.pdf(range(len(cell))).sum())/(self.N) < self.T:
-                    return True
-        return False
+                    anomaly[i]= True
+            i += 1
+        return anomaly
 
 
 class UCSD:
@@ -84,7 +88,6 @@ class UCSD:
     def save_data(self, mots):
         j = 0
         for i in range(1, len(mots), 3):
-        # for i in range(len(mots)):
             if i+1 < len(mots):
                 nextOne = mots[i+1]
                 divide = 3.0
@@ -138,15 +141,19 @@ class UCSD:
                             if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
                                 x, y = self.tracks_ceils_id[self.tracks.index(tr)]
                                 mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
-                                cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
                                 movement += 1
-
-                                draw_str(frameCopy, (20, 20), 'movement detected: %d' % movement)
-                mots.append(mot)
                 if not self.train:
                     is_anomaly = speedClassifier.is_anomaly(mot)
-                    if is_anomaly:
-                        print number_frame, " is an anomaly"
+                    if sum(is_anomaly) > 0:
+                        index = 0
+                        for anomaly in is_anomaly:
+                            if anomaly:
+                                tr = self.tracks[index]
+                                cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
+                                draw_str(frameCopy, (20, 20), 'anomaly detected:')
+                            index += 1
+            if self.train:
+                mots.append(mot)
             cv2.imshow('frame', frameCopy)
             number_frame += 1
             old_frame = fgmask

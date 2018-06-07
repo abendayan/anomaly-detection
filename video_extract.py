@@ -3,7 +3,7 @@ import numpy as np
 import time
 import cv2
 from os import listdir
-from os.path import isfile, join
+from os.path import isfile, join, isdir
 from scipy.stats.kde import gaussian_kde
 import scipy.stats  as stats
 from scipy.stats import norm
@@ -20,16 +20,11 @@ lk_params = dict( winSize  = (15,15),
                   maxLevel = 2,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 class Classifier:
-    def __init__(self, data):
-        self.T = 0.0
-        self.N = len(data)*len(data[0])*len(data[0][1])
+    def __init__(self):
         self.T = 3.0
-        self.train_classifier(data)
+        self.N = 0
 
     def train_classifier(self, data):
-        rbf_svc = svm.OneClassSVM(kernel='rbf')
-        mu, std = norm.fit(data)
-        means = []
         for cells in data:
             prob = []
             for cell in cells:
@@ -41,7 +36,6 @@ class Classifier:
             if len(prob) > 0:
                 if min(prob) < self.T:
                     self.T = min(prob)
-        print self.T
 
     def is_anomaly(self, cells):
         anomaly = [False]*len(cells)
@@ -98,6 +92,7 @@ class UCSD:
             j += 1
 
     def learn_one_video(self, video_name, classifier = None):
+        self.data = []
         files = [f for f in listdir(self.path+video_name) if isfile(join(self.path+video_name, f))]
         if '.DS_Store' in files:
             files.remove('.DS_Store')
@@ -141,17 +136,21 @@ class UCSD:
                             if not (float(tr[-2][0]) == float(tr[-1][0]) and float(tr[-2][1]) == float(tr[-1][1])):
                                 x, y = self.tracks_ceils_id[self.tracks.index(tr)]
                                 mot[x][y] = abs(np.linalg.norm(np.array(tr[-2])) - np.linalg.norm(np.array(tr[-1])))
-                                movement += 1
                 if not self.train:
                     is_anomaly = speedClassifier.is_anomaly(mot)
                     if sum(is_anomaly) > 0:
                         index = 0
+                        really_anomaly = False
                         for anomaly in is_anomaly:
                             if anomaly:
-                                tr = self.tracks[index]
-                                cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
-                                draw_str(frameCopy, (20, 20), 'anomaly detected:')
+                                if (index > 0 and is_anomaly[index-1]) or (index < len(is_anomaly) - 1 and is_anomaly[index+1]):
+                                    really_anomaly = True
+                                    tr = self.tracks[index]
+                                    cv2.circle(frameCopy, (tr[-1][1], tr[-1][0]), self.n, (0, 255, 0))
+                                    draw_str(frameCopy, (20, 20), 'anomaly detected:')
                             index += 1
+                        if really_anomaly:
+                            print number_frame
             if self.train:
                 mots.append(mot)
             cv2.imshow('frame', frameCopy)
@@ -166,9 +165,24 @@ class UCSD:
 
 if __name__ == '__main__':
     ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', 16, 10)
+    dir_trains = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/', f))]
+    dir_trains.sort()
+    speedClassifier = Classifier()
     ucsd_training.learn_one_video('Train001/')
+    speedClassifier.N = len(ucsd_training.data)*len(ucsd_training.data[0])*len(ucsd_training.data[0][0])
+    # speedClassifier.N = 10050
+    speedClassifier.train_classifier(ucsd_training.data)
 
-    speedClassifier = Classifier(ucsd_training.data)
+    dir_trains.pop(0)
+
+    for directory in dir_trains:
+        print directory
+        ucsd_training.learn_one_video(directory+'/')
+        speedClassifier.train_classifier(ucsd_training.data)
+
+    print speedClassifier.T
+
+    # speedClassifier.T = 0.0002573289882909553
 
     ucsd_testing = UCSD('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Test/', 16, 10, False)
-    ucsd_testing.learn_one_video('Test001/', speedClassifier)
+    ucsd_testing.learn_one_video('Test002/', speedClassifier)

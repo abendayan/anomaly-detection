@@ -6,6 +6,7 @@ import glob
 
 background = cv2.imread("background.tiff")
 N=16
+threshold_grayscale=35
 
 def compute_size_in_cell(matrix, focus, row, col):
     sum = 0
@@ -33,8 +34,11 @@ def get_background():
 def get_foreground(img_name):
     img = cv2.imread(img_name)
     foreground = cv2.absdiff(img, background)
+    img_name = os.path.basename(img_name)
+    cv2.imwrite('Test001-foreground/{}'.format(img_name), foreground)
     img_grey = cv2.cvtColor(foreground, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(img_grey, 40, 255, cv2.THRESH_BINARY)
+    ret, thresh = cv2.threshold(img_grey, threshold_grayscale, 255, cv2.THRESH_BINARY)
+    cv2.imwrite('Test001-thresh/{}'.format(img_name), thresh)
     return thresh
 
 def get_cells_pixels(img):
@@ -66,24 +70,33 @@ def get_contours(thresh):
     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     return contours
 
-for f in glob.glob(r'/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train001/*'):
+kernel = np.ones((5,5),np.uint8)
+for f in glob.glob(r'/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/UCSDped1/Test/Test001/*'):
     img = cv2.imread(f)
     foreground = get_foreground(f)
+    #closing = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, kernel)
+    #dilation = cv2.dilate(foreground, kernel, iterations=1)
     contours = get_contours(foreground)
     areas = []
     perimeters = []
+    i = 0
     for cnt in contours:
         a = cv2.contourArea(cnt)
-        areas.append(a)
-        p = cv2.arcLength(cnt,True)
-        perimeters.append(p)
+        if a > 0:
+            areas.append(a)
+        p = cv2.arcLength(cnt, True)
+        if p > 0:
+            perimeters.append(p)
+        #if a > 20 and p > 0:
         cv2.drawContours(img, [cnt], 0, (255, 0, 0), 1)
+
     filename = os.path.basename(f)
-    cv2.imwrite('Train001-output/{}'.format(filename),img)
+    cv2.imwrite('Test001-output/{}'.format(filename),img)
     print areas
     print 'average',sum(areas)/len(areas)
     print perimeters
-    print  'average',sum(perimeters)/len(perimeters)
+    print 'average',sum(perimeters)/len(perimeters)
+
 
 #cv2.drawContours(img, get_contours(foreground), -1, (0, 255, 0), 3)
 

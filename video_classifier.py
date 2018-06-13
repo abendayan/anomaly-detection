@@ -6,6 +6,7 @@ from os import listdir
 from os.path import isfile, join, isdir
 import random
 from sklearn.tree import DecisionTreeClassifier
+from UCSDped1 import TestVideoFile
 
 def draw_str(dst, target, s):
     x, y = target
@@ -38,6 +39,7 @@ class UCSDTest:
     def process_frame(self, bins, magnitude, fmask):
         bin_count = np.zeros(9, np.uint8)
         h,w, t = bins.shape
+        found_anomaly = False
         for i in range(0, h, self.n):
             for j in range(0, w, self.n):
                 i_end = min(h, i+self.n)
@@ -69,13 +71,14 @@ class UCSDTest:
                 vector = np.matrix(features)
                 predicted = self.clf.predict(vector)[0]
                 if predicted == 1:
-                    print i, j
+                    # import pdb; pdb.set_trace()
                     cv2.rectangle(fmask, (j, i), (j_end, i_end), (255,0,0), 2)
+                    found_anomaly = True
                     # cv2.circle(fmask, (j, i), self.n, (0, 255, 0))
                 # out.write()
                 # print(f, end=",", file=out)
                 # print("\n", end="", file=out)
-        return 0
+        return found_anomaly
 
     def process_video(self, video_name):
         mag_threshold=1e-3
@@ -97,6 +100,7 @@ class UCSDTest:
         mag = np.zeros((h, w, self.detect_interval), np.float32)
         fmask = np.zeros((h, w, self.detect_interval), np.uint8)
         frames = np.zeros((h, w, self.detect_interval), np.uint8)
+        anomaly_detected = []
         for tif in files:
             movement = 0
             frame = cv2.imread(self.path + video_name + tif, cv2.IMREAD_GRAYSCALE)
@@ -112,8 +116,10 @@ class UCSDTest:
             binno[magnitude < mag_threshold] = 0
             bins[...,number_frame % self.detect_interval] = binno
             mag[..., number_frame % self.detect_interval] = magnitude
-            if number_frame % self.detect_interval == 0:
-                self.process_frame(bins, mag, frameCopy)
+            # if number_frame % self.detect_interval == 0:
+            found_anomaly = self.process_frame(bins, mag, frameCopy)
+            if found_anomaly:
+                anomaly_detected.append(number_frame)
             cv2.imshow('frame', frameCopy)
             number_frame += 1
             old_frame = frame
@@ -121,16 +127,28 @@ class UCSDTest:
             if k == 27:
                 break
         cv2.destroyAllWindows()
+        return anomaly_detected
 
 if __name__ == '__main__':
     ucsdped = 'UCSDped1'
-    ucsd_test = UCSDTest('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', 10, 2, ucsdped)
+    ucsd_test = UCSDTest('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', 10, 5, ucsdped)
     dir_test = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
     dir_test.sort()
-    ucsd_test.process_video('Test001/')
-    dir_test.pop(0)
-
+    total_correct = 0.0
+    total_should_found = 0.0
+    total_found = 0.0
     for directory in dir_test:
         print directory
         if not directory.endswith("gt"):
-            ucsd_test.process_video(directory+'/')
+            anomaly_detected = ucsd_test.process_video(directory+'/')
+            total_found += len(anomaly_detected)
+            index_video = int(directory[-3:])
+            total_correct += len(set(anomaly_detected).intersection(TestVideoFile[index_video]))
+            total_should_found += len(TestVideoFile[index_video])
+
+    precision = total_correct/total_found
+    recall = total_correct/total_should_found
+    f1 = 2.0*precision*recall/(precision+recall)
+    print "Precision: ", precision
+    print "Recall: ", recall
+    print "F1: ", f1

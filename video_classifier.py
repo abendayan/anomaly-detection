@@ -5,15 +5,37 @@ import cv2
 from os import listdir
 from os.path import isfile, join, isdir
 import random
+from sklearn.tree import DecisionTreeClassifier
 
-class UCSD:
-    def __init__(self, path, n, detect_interval):
+def draw_str(dst, target, s):
+    x, y = target
+    cv2.putText(dst, s, (x+1, y+1), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), thickness = 2, lineType=cv2.LINE_AA)
+    cv2.putText(dst, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.LINE_AA)
+
+class UCSDTest:
+    def __init__(self, path, n, detect_interval, type):
         self.path = path
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
+        self.clf = DecisionTreeClassifier(max_depth=5)
+        self.load_train_features(type)
 
-    def process_frame(self, bins, magnitude, fmask, out, tag_image = None):
+    def load_train_features(self, type):
+        x_train = []
+        y_train = []
+        features = [f for f in listdir('features/') if f.startswith("features_test_"+type)]
+        for feature in features:
+            file = open('features/' + feature, "r")
+            feature_text = file.read().split("\n")
+            for f in feature_text:
+                if f!= "":
+                    feat_all = [float(feat) for feat in f.split(" ")[:-1]]
+                    x_train.append(feat_all[:-1])
+                    y_train.append(int(feat_all[-1]))
+        self.clf.fit(x_train, y_train)
+
+    def process_frame(self, bins, magnitude, fmask):
         bin_count = np.zeros(9, np.uint8)
         h,w, t = bins.shape
         for i in range(0, h, self.n):
@@ -37,36 +59,28 @@ class UCSD:
                 # get the tag atom
                 # tag_atom = tag_image[i:i_end, j:j_end].flatten()
                 #print(tag_atom)
-                if tag_image is None:
-                    tag = 0
-                else:
-                    tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                    ones = np.count_nonzero(tag_atom)
-                    zeroes = len(tag_atom) - ones
-                    tag = 1
-                    # print ones
-                    if ones < 50:
-                        tag = 0
+                # ones = np.count_nonzero(tag_atom)
+                # zeroes = len(tag_atom) - ones
+                tag = 0
+                # if ones < self.n:
+                    # tag = 0
                 features = hs.tolist()
-                features.extend([f_cnt, atom_mag, tag])
-                for f in features:
-                    out.write(str(f) + " ")
-                out.write("\n")
+                features.extend([f_cnt, atom_mag])
+                vector = np.matrix(features)
+                predicted = self.clf.predict(vector)[0]
+                if predicted == 1:
+                    print i, j
+                    cv2.rectangle(fmask, (j, i), (j_end, i_end), (255,0,0), 2)
+                    # cv2.circle(fmask, (j, i), self.n, (0, 255, 0))
+                # out.write()
+                # print(f, end=",", file=out)
+                # print("\n", end="", file=out)
         return 0
 
-    def extract_features(self, video_name, type, tag_video = ""):
+    def process_video(self, video_name):
         mag_threshold=1e-3
         elements = 0
-        is_tagged = not tag_video == ""
-        out = open("features/features_test_"+type+"_"+video_name.split("/")[0]+".txt","w")
         files = [f for f in listdir(self.path+video_name) if isfile(join(self.path+video_name, f))]
-        if is_tagged:
-            files_tag = [f for f in listdir(self.path+tag_video) if isfile(join(self.path+tag_video, f))]
-            if '.DS_Store' in files_tag:
-                files_tag.remove('.DS_Store')
-            if '._.DS_Store' in files_tag:
-                files_tag.remove('._.DS_Store')
-            files_tag.sort()
         if '.DS_Store' in files:
             files.remove('.DS_Store')
         if '._.DS_Store' in files:
@@ -83,17 +97,12 @@ class UCSD:
         mag = np.zeros((h, w, self.detect_interval), np.float32)
         fmask = np.zeros((h, w, self.detect_interval), np.uint8)
         frames = np.zeros((h, w, self.detect_interval), np.uint8)
-        if is_tagged:
-            tag_img = np.zeros((h,w,self.n), np.uint8)
         for tif in files:
             movement = 0
             frame = cv2.imread(self.path + video_name + tif, cv2.IMREAD_GRAYSCALE)
             fmask[...,number_frame % self.detect_interval] = self.fgbg.apply(frame)
             frameCopy = frame.copy()
             flow = cv2.calcOpticalFlowFarneback(old_frame, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            if is_tagged:
-                tag_img_ = cv2.imread(self.path + tag_video + files_tag[number_frame] ,cv2.IMREAD_GRAYSCALE)
-                tag_img[...,number_frame % self.detect_interval] = tag_img_
             # Calculate direction and magnitude
             height, width = flow.shape[:2]
             fx, fy = flow[:,:,0], flow[:,:,1]
@@ -104,10 +113,7 @@ class UCSD:
             bins[...,number_frame % self.detect_interval] = binno
             mag[..., number_frame % self.detect_interval] = magnitude
             if number_frame % self.detect_interval == 0:
-                if is_tagged:
-                    self.process_frame(bins, mag, frameCopy, out, tag_img)
-                else:
-                    self.process_frame(bins, mag, frameCopy, out)
+                self.process_frame(bins, mag, frameCopy)
             cv2.imshow('frame', frameCopy)
             number_frame += 1
             old_frame = frame
@@ -115,26 +121,16 @@ class UCSD:
             if k == 27:
                 break
         cv2.destroyAllWindows()
-        out.close()
 
 if __name__ == '__main__':
     ucsdped = 'UCSDped1'
-    ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', 10, 5)
-    dir_trains = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', f))]
-    dir_tests = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
-    dir_trains.sort()
-    # out = open("features_test_UCSDped1.txt","w")
-    # ucsd_training.extract_features('Train001/', ucsdped)
-    dir_trains.pop(0)
+    ucsd_test = UCSDTest('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', 10, 2, ucsdped)
+    dir_test = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
+    dir_test.sort()
+    ucsd_test.process_video('Test001/')
+    dir_test.pop(0)
 
-    li = ["Test/Test003","Test/Test004","Test/Test014","Test/Test018","Test/Test019", "Test/Test021","Test/Test022","Test/Test023","Test/Test024","Test/Test032"]
-    ucsd_training.path = 'UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/'
-    for directory in li:
+    for directory in dir_test:
         print directory
         if not directory.endswith("gt"):
-            dir_split = directory.split("/")[1]
-            dir_split = dir_split + '_gt'
-            if dir_split in dir_tests:
-                ucsd_training.extract_features(directory+'/', ucsdped, directory + '_gt/')
-            else:
-                ucsd_training.extract_features(directory+'/', ucsdped)
+            ucsd_test.process_video(directory+'/')

@@ -5,6 +5,7 @@ import cv2
 from os import listdir
 from os.path import isfile, join, isdir
 import random
+from model import VideoLearn
 
 class UCSD:
     def __init__(self, path, n, detect_interval):
@@ -12,10 +13,14 @@ class UCSD:
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
+        self.features = []
+        self.labels = []
 
     def process_frame(self, bins, magnitude, fmask, out, tag_image = None):
         bin_count = np.zeros(9, np.uint8)
         h,w, t = bins.shape
+        features_j = []
+        labels_j = []
         for i in range(0, h, self.n):
             for j in range(0, w, self.n):
                 i_end = min(h, i+self.n)
@@ -48,11 +53,13 @@ class UCSD:
                     if ones < 50:
                         tag = 0
                 features = hs.tolist()
-                features.extend([f_cnt, atom_mag, tag])
+                features.extend([f_cnt, atom_mag, i, j, tag])
+                features_j.append(features[:-1])
+                labels_j.append(tag)
                 for f in features:
                     out.write(str(f) + " ")
                 out.write("\n")
-        return 0
+        return features_j, labels_j
 
     def extract_features(self, video_name, type, tag_video = ""):
         mag_threshold=1e-3
@@ -105,7 +112,9 @@ class UCSD:
             mag[..., number_frame % self.detect_interval] = magnitude
             if number_frame % self.detect_interval == 0:
                 if is_tagged:
-                    self.process_frame(bins, mag, frameCopy, out, tag_img)
+                    feat, label = self.process_frame(bins, mag, frameCopy, out, tag_img)
+                    self.features.extend(feat)
+                    self.labels.extend(label)
                 else:
                     self.process_frame(bins, mag, frameCopy, out)
             cv2.imshow('frame', frameCopy)
@@ -127,7 +136,8 @@ if __name__ == '__main__':
     # ucsd_training.extract_features('Train001/', ucsdped)
     dir_trains.pop(0)
 
-    li = ["Test/Test003","Test/Test004","Test/Test014","Test/Test018","Test/Test019", "Test/Test021","Test/Test022","Test/Test023","Test/Test024","Test/Test032"]
+    li = ["Test/Test003"]
+    # li = ["Test/Test003","Test/Test004","Test/Test014","Test/Test018","Test/Test019", "Test/Test021","Test/Test022","Test/Test023","Test/Test024","Test/Test032"]
     ucsd_training.path = 'UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/'
     for directory in li:
         print directory
@@ -138,3 +148,6 @@ if __name__ == '__main__':
                 ucsd_training.extract_features(directory+'/', ucsdped, directory + '_gt/')
             else:
                 ucsd_training.extract_features(directory+'/', ucsdped)
+
+    learning = VideoLearn(13, 1)
+    learning.learn(ucsd_training.features, ucsd_training.labels, 1)

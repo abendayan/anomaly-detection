@@ -10,7 +10,7 @@ threshold_grayscale=30
 reg0=25
 reg1=50
 reg2=100
-regions_Y=[25,50,75,100,125,140] # do not take into considerations objects with y<25 or y>140
+regions_Y=[25,50,75,100,125,140]
 areas=[20,30,40]
 heights=[5,]
 colors=[(255,0,0),(0,255,0),(0,0,255),(0,255,255),(255,0,255)]
@@ -90,10 +90,10 @@ def sort_contours_by_region(contours):
     for c in contours:
         x,y,w,h = cv2.boundingRect(c)
         bounding_rect_area = w*h
-        if cv2.contourArea(c) < 4:
-            continue
+        # if cv2.contourArea(c) < 2:
+        #     continue
         l = None # find region according to y
-        if y < 25 or y > 140:
+        if y < 25 or y > 140: # do not take into considerations objects with y<25 or y>140
             continue
         elif 25 <= y <= 50:
             l = contour_in_region_i[0]
@@ -133,11 +133,13 @@ def find_humans_according_to_area(img,img_name,regions):
         if not regions[i]:
             return
         default_height_for_region = average_height(regions[i])
+        print "default region",default_height_for_region
         for tup in regions[i]:
             cnt = tup[0]
             a = cv2.contourArea(cnt)
             x, y, w, h = tup[1]
-            if abs(h - default_height_for_region) < 2:
+            d = abs(h - default_height_for_region)
+            if a > 4:
                 cv2.drawContours(img, [cnt], 0, colors[i], 1)
                 print "*********************************************** Region ", i ,"height",h, "width", w
             else:

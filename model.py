@@ -69,11 +69,11 @@ class VideoLearn():
                 loss.backward()
                 self.optimizer.step()
                 total += b_x.shape[-1]
-                if int(batch_y.item()) == 1:
-                    total_anomaly += 1
-                    if predicted == 1:
-                        correct_anomaly += 1
-                correct += (predicted == labels).sum().item()
+                # if int(batch_y.item()) == 1:
+                #     total_anomaly += 1
+                #     if predicted == 1:
+                #         correct_anomaly += 1
+                correct += (predicted == batch_y.long()).sum().item()
             print "accuracy", "loss", "accuracy on anomalies"
             print correct/total, running_loss/total, correct_anomaly/total_anomaly
         torch.save(self.model.state_dict(), 'video_extract.pt')

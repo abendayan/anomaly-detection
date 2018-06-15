@@ -7,19 +7,20 @@ import torch.optim as optim
 import torch.utils.data as Data
 import torch.autograd as autograd
 import numpy as np
+from torch.utils.data.sampler import WeightedRandomSampler
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Regression(nn.Module):
     def __init__(self, input_dim, output):
         super(Regression, self).__init__()
-        self.sequential = nn.Sequential()
-        self.linear =  nn.Linear(input_dim, output, bias=False)
+        self.fc = nn.Linear(input_dim, output)
 
     def forward(self, inputs):
-        out1 = self.sequential(inputs)
-        out2 = self.linear(out1)
-        return out2
+        # out1 = self.fc(inputs)
+        out = F.relu(self.fc(inputs))
+        # out2 = self.linear(out1)
+        return out
 
 def data_to_images_labels(inputs, labels):
     if torch.cuda.is_available():
@@ -36,9 +37,19 @@ class VideoLearn():
         if torch.cuda.is_available():
             self.model.to(device)
 
-    def learn(self, input_data, labels, epochs):
-        train = Data.TensorDataset(torch.FloatTensor(input_data), torch.FloatTensor(labels))
-        train_loader = Data.DataLoader(train, batch_size=self.batch_size, shuffle=True)
+    def learn(self, data, target, epochs):
+        print 'target train 0/1: {}/{}'.format(len(np.where(target == 0)[0]), len(np.where(target == 1)[0]))
+        class_sample_count = np.array([len(np.where(target == t)[0]) for t in np.unique(target)])
+        weight = 1. / class_sample_count
+        samples_weight = np.array([weight[t] for t in target])
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        target = torch.from_numpy(target).float()
+        train_dataset = Data.TensorDataset(torch.FloatTensor(data), target)
+
+        # train = Data.TensorDataset(torch.FloatTensor(input_data), torch.FloatTensor(labels))
+        train_loader = Data.DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler)
         for epoch in range(epochs):
             correct = 0.0
             total = 0.0
@@ -48,10 +59,11 @@ class VideoLearn():
             for i, (b_x, b_y) in enumerate(train_loader):
                 self.optimizer.zero_grad()
                 b_x, b_y = data_to_images_labels(b_x, b_y)
-                batch_x = autograd.Variable(b_x, requires_grad=False)
-                batch_y = autograd.Variable(b_y, requires_grad=False)
+                batch_x = autograd.Variable(b_x)
+                batch_y = autograd.Variable(b_y)
                 outputs = self.model(batch_x)
-                predicted = outputs.data.cpu().numpy().argmax(axis=1)[0]
+                _, predicted = torch.max(outputs.data, 1)
+                # predicted = outputs.data.cpu().numpy().argmax(axis=1)[0]
                 loss = self.criterion(outputs, batch_y.long())
                 running_loss += loss.item()
                 loss.backward()
@@ -61,7 +73,7 @@ class VideoLearn():
                     total_anomaly += 1
                     if predicted == 1:
                         correct_anomaly += 1
-                correct += (predicted == int(batch_y.item()))
+                correct += (predicted == labels).sum().item()
             print "accuracy", "loss", "accuracy on anomalies"
             print correct/total, running_loss/total, correct_anomaly/total_anomaly
         torch.save(self.model.state_dict(), 'video_extract.pt')
@@ -78,7 +90,7 @@ class VideoCLassifier():
         test_loader = Data.DataLoader(test, 1)
         bx, by = test_loader.dataset.tensors
         bx, by = data_to_images_labels(bx, by)
-        x = autograd.Variable(bx, requires_grad=False)
+        x = autograd.Variable(bx)
         # y = autograd.Variable(by, requires_grad=False)
         outputs = self.model(x)
         return outputs.data.cpu().numpy().argmax(axis=1)[0]

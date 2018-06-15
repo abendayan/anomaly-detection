@@ -38,6 +38,7 @@ class UCSD:
 
                             # Count of foreground values
                             f_cnt = np.count_nonzero(atom_fmask)
+                            f_cnt_2 = np.count_nonzero(fmask[i:i_end, j:j_end].flatten())
 
                             # Get the direction bins values
                             hs, _ = np.histogram(atom_bins, np.arange(10))
@@ -53,7 +54,7 @@ class UCSD:
                             if ones < 50:
                                 tag = 0
                             features = hs.tolist()
-                            features.extend([f_cnt, atom_mag, i, j, tag])
+                            features.extend([f_cnt, f_cnt_2, atom_mag, i, i+self.n, j, j+self.n, tag])
                             features_j.append(features[:-1])
                             labels_j.append(tag)
                             for f in features:
@@ -162,6 +163,6 @@ if __name__ == '__main__':
     #             ucsd_training.extract_features(directory+'/', ucsdped)
 
     x_train, target = load_train_features(ucsdped)
-    learning = VideoLearn(13, 10, 0.01)
+    learning = VideoLearn(16, 5, 0.001)
 
-    learning.learn(x_train, target, 10)
+    learning.learn(x_train, target, 3)

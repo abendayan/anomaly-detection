@@ -19,13 +19,31 @@ def draw_str(dst, target, s):
 def passed_time(previous_time):
     return round(time.time() - previous_time, 3)
 
+def load_train_features(type):
+    x_train = []
+    y_train = []
+    features = [f for f in listdir('features/') if f.startswith("features_test_"+type)]
+    for feature in features:
+        file = open('features/' + feature, "r")
+        feature_text = file.read().split("\n")
+        for f in feature_text:
+            if f!= "":
+                feat_all = [float(feat) for feat in f.split(" ")[:-1]]
+                x_train.append(feat_all[:-1])
+                y_train.append(int(feat_all[-1]))
+
+    return x_train, np.array(y_train)
+
 class UCSDTest:
     def __init__(self, path, n, detect_interval, type):
         self.path = path
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
-        self.classifier = VideoClassifier()
+        # self.classifier = VideoClassifier()
+        self.clf = DecisionTreeClassifier(max_depth=5)
+        x, y = load_train_features(type)
+        self.clf.fit(x, y)
         self.true_positive = 0.0
         self.false_positive = 0.0
         self.false_negative = 0.0
@@ -35,7 +53,7 @@ class UCSDTest:
         if np.count_nonzero(fmask) == 0:
             return False
         bin_count = np.zeros(9, np.uint8)
-        h,w = bins.shape
+        h,w,t = bins.shape
         found_anomaly = False
         features_j = []
         tag_j = []
@@ -55,11 +73,12 @@ class UCSDTest:
 
                         # Count of foreground values
                         f_cnt = np.count_nonzero(atom_fmask)
+                        f_cnt_2 = np.count_nonzero(fmask[i:i_end, j:j_end].flatten())
 
                         # Get the direction bins values
                         hs, _ = np.histogram(atom_bins, np.arange(10))
                         features = hs.tolist()
-                        features.extend([f_cnt, atom_mag, i, j])
+                        features.extend([f_cnt, f_cnt_2, atom_mag, i, i+self.n, j, j+self.n])
                         features_j.append(features)
                         # vector = np.array(features)
                         tag_atom = tag_img[i:i_end, j:j_end].flatten()
@@ -69,7 +88,8 @@ class UCSDTest:
                             tag = 0
                         tag_j.append(tag)
                         index_i_j.append((i,j))
-        predicted = self.classifier.predict(features_j, tag_j)
+        predicted = self.clf.predict(features_j, tag_j)
+        # predicted = self.classifier.predict(features_j, tag_j)
         # self.true_positive += true_positive
         for index, pred in enumerate(predicted):
             pred = pred.item()
@@ -134,8 +154,8 @@ class UCSDTest:
             binno = np.ceil(angle/45)
             magnitude = np.sqrt(fx*fx+fy*fy)
             binno[magnitude < mag_threshold] = 0
-            bins = binno
-            mag = magnitude
+            bins[...,number_frame % self.detect_interval] = binno
+            mag[..., number_frame % self.detect_interval] = magnitude
             # if number_frame % self.detect_interval == 0:
             found_anomaly = self.process_frame(bins, mag, fmask, tag_img, frame)
             if found_anomaly:

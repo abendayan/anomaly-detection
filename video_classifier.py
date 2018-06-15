@@ -8,6 +8,7 @@ import random
 from sklearn.tree import DecisionTreeClassifier
 from UCSDped1 import TestVideoFile
 from sklearn.neighbors import KNeighborsClassifier
+from model import VideoCLassifier
 import time
 
 def draw_str(dst, target, s):
@@ -24,9 +25,10 @@ class UCSDTest:
         self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
-        self.clf = DecisionTreeClassifier(max_depth=5)
+        # self.clf = DecisionTreeClassifier(max_depth=5)
         # self.clf = KNeighborsClassifier(3)
-        self.load_train_features(type)
+        # self.load_train_features(type)
+        self.classifier = VideoCLassifier()
         self.correct = 0.0
         self.found = 0.0
         self.should_find = 0.0
@@ -43,7 +45,7 @@ class UCSDTest:
                     feat_all = [float(feat) for feat in f.split(" ")[:-1]]
                     x_train.append(feat_all[:-1])
                     y_train.append(int(feat_all[-1]))
-        self.clf.fit(x_train, y_train)
+        # self.clf.fit(x_train, y_train)
 
     def process_frame(self, bins, magnitude, fmask, tag_img):
         bin_count = np.zeros(9, np.uint8)
@@ -68,8 +70,8 @@ class UCSDTest:
                 # Get the direction bins values
                 hs, _ = np.histogram(atom_bins, np.arange(10))
                 features = hs.tolist()
-                features.extend([f_cnt, atom_mag])
-                vector = np.matrix(features)
+                features.extend([f_cnt, atom_mag, i, j])
+                # vector = np.array(features)
                 tag_atom = tag_img[i:i_end, j:j_end].flatten()
                 ones = np.count_nonzero(tag_atom)
                 zeroes = len(tag_atom) - ones
@@ -77,7 +79,7 @@ class UCSDTest:
                 # print ones
                 if ones < 50:
                     tag = 0
-                predicted = self.clf.predict(vector)[0]
+                predicted = self.classifier.predict(features, tag)
                 if tag == 1:
                     self.should_find += 1
                 if predicted == tag and predicted == 1:

@@ -9,18 +9,30 @@ import torch.autograd as autograd
 import numpy as np
 from torch.utils.data.sampler import WeightedRandomSampler
 
+torch.manual_seed(1)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def passed_time(previous_time):
+    return round(time.time() - previous_time, 3)
 
 class Regression(nn.Module):
     def __init__(self, input_dim, output):
         super(Regression, self).__init__()
-        self.fc = nn.Linear(input_dim, output)
+        hidden = int(input_dim/2)
+        # self.fc1 = nn.Linear(input_dim, input_dim-2)
+        self.fc1 = nn.Linear(input_dim, 2)
+        # self.fc2 = nn.Linear(input_dim-2, hidden)
+        # self.fc3 = nn.Linear(hidden, output)
+        # self.batchNorm = nn.BatchNorm1d(hidden)
 
     def forward(self, inputs):
         # out1 = self.fc(inputs)
-        out = F.relu(self.fc(inputs))
+        # out = F.relu(self.fc1(inputs))
+        # out = F.relu(self.fc2(out))
+        # out = self.fc3(out)
         # out2 = self.linear(out1)
-        return out
+        return self.fc1(inputs)
+        # return out
 
 def data_to_images_labels(inputs, labels):
     if torch.cuda.is_available():
@@ -32,7 +44,7 @@ class VideoLearn():
         self.model = Regression(13, 2)
         self.batch_size = batch_size
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         # self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         if torch.cuda.is_available():
             self.model.to(device)
@@ -53,7 +65,7 @@ class VideoLearn():
         for epoch in range(epochs):
             correct = 0.0
             total = 0.0
-            correct_anomaly = 0.0
+            detected_anomaly  = 0.0
             total_anomaly = 0.0
             running_loss = 0.0
             for i, (b_x, b_y) in enumerate(train_loader):
@@ -63,19 +75,16 @@ class VideoLearn():
                 batch_y = autograd.Variable(b_y)
                 outputs = self.model(batch_x)
                 _, predicted = torch.max(outputs.data, 1)
-                # predicted = outputs.data.cpu().numpy().argmax(axis=1)[0]
                 loss = self.criterion(outputs, batch_y.long())
                 running_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
-                total += b_x.shape[-1]
-                # if int(batch_y.item()) == 1:
-                #     total_anomaly += 1
-                #     if predicted == 1:
-                #         correct_anomaly += 1
+                total += b_y.shape[0]
+                detected_anomaly += np.count_nonzero(predicted)
+                total_anomaly += np.count_nonzero(batch_y)
                 correct += (predicted == batch_y.long()).sum().item()
-            print "accuracy", "loss", "accuracy on anomalies"
-            print correct/total, running_loss/total, correct_anomaly/total_anomaly
+            print "epoch", "accuracy", "loss", "detected anomaly", "total anomaly", "difference learned"
+            print epoch, correct/total, running_loss/total, detected_anomaly, total_anomaly, detected_anomaly - total_anomaly
         torch.save(self.model.state_dict(), 'video_extract.pt')
 
 class VideoCLassifier():
@@ -86,11 +95,12 @@ class VideoCLassifier():
             self.model.to(device)
 
     def predict(self, input_data, label):
-        test = Data.TensorDataset(torch.FloatTensor([input_data]), torch.FloatTensor([label]))
+        test = Data.TensorDataset(torch.FloatTensor(input_data), torch.FloatTensor(label))
         test_loader = Data.DataLoader(test, 1)
         bx, by = test_loader.dataset.tensors
         bx, by = data_to_images_labels(bx, by)
         x = autograd.Variable(bx)
         # y = autograd.Variable(by, requires_grad=False)
         outputs = self.model(x)
-        return outputs.data.cpu().numpy().argmax(axis=1)[0]
+        _, predicted = torch.max(outputs.data, 1)
+        return predicted, (predicted == by.long()).sum().item()

@@ -47,47 +47,61 @@ class UCSDTest:
                     y_train.append(int(feat_all[-1]))
         # self.clf.fit(x_train, y_train)
 
-    def process_frame(self, bins, magnitude, fmask, tag_img):
+    def process_frame(self, bins, magnitude, fmask, tag_img, frame):
+        if np.count_nonzero(fmask) == 0:
+            return False
         bin_count = np.zeros(9, np.uint8)
         h,w, t = bins.shape
         found_anomaly = False
-        predicted = [ [0 for j in range(0, w, self.n)] for i in range(0, h, self.n) ]
+        features_j = []
+        tag_j = []
+        index_i_j = []
         for i in range(0, h, self.n):
-            for j in range(0, w, self.n):
-                i_end = min(h, i+self.n)
+            i_end = min(h, i+self.n)
+            if np.count_nonzero(fmask[i]) > 0:
+                for j in range(0, w, self.n):
+                    j_end = min(w, j+self.n)
+                    if np.count_nonzero(fmask[i:i_end, j:j_end]) > 0:
+                        # Get the atom for bins
+                        atom_bins = bins[i:i_end, j:j_end].flatten()
+
+                        # Average magnitude
+                        atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
+                        atom_fmask = fmask[i:i_end, j:j_end].flatten()
+
+                        # Count of foreground values
+                        f_cnt = np.count_nonzero(atom_fmask)
+
+                        # Get the direction bins values
+                        hs, _ = np.histogram(atom_bins, np.arange(10))
+                        features = hs.tolist()
+                        features.extend([f_cnt, atom_mag, i, j])
+                        features_j.append(features)
+                        # vector = np.array(features)
+                        tag_atom = tag_img[i:i_end, j:j_end].flatten()
+                        ones = np.count_nonzero(tag_atom)
+                        tag = 1
+                        if ones < 50:
+                            tag = 0
+                        tag_j.append(tag)
+                        index_i_j.append((i,j))
+        predicted, correct_t = self.classifier.predict(features_j, tag_j)
+        self.correct += correct_t
+        for index, pred in enumerate(predicted):
+            pred = pred.item()
+            if pred == 1:
+                i, j = index_i_j[index]
                 j_end = min(w, j+self.n)
-
-                # Get the atom for bins
-                atom_bins = bins[i:i_end, j:j_end].flatten()
-
-                # Average magnitude
-                atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
-                atom_fmask = fmask[i:i_end, j:j_end].flatten()
-
-                # Count of foreground values
-                f_cnt = np.count_nonzero(atom_fmask)
-
-                # Get the direction bins values
-                hs, _ = np.histogram(atom_bins, np.arange(10))
-                features = hs.tolist()
-                features.extend([f_cnt, atom_mag, i, j])
-                # vector = np.array(features)
-                tag_atom = tag_img[i:i_end, j:j_end].flatten()
-                ones = np.count_nonzero(tag_atom)
-                zeroes = len(tag_atom) - ones
-                tag = 1
-                # print ones
-                if ones < 50:
-                    tag = 0
-                predicted = self.classifier.predict(features, tag)
-                if tag == 1:
-                    self.should_find += 1
-                if predicted == tag and predicted == 1:
-                    self.correct += 1
-                if predicted == 1:
-                    self.found += 1
-                    cv2.rectangle(fmask, (j, i), (j_end, i_end), (255,0,0), 2)
-                    found_anomaly = True
+                i_end = min(h, i+self.n)
+                cv2.rectangle(frame, (j, i), (j_end, i_end), (255, 0, 0), 2)
+                found_anomaly = True
+        self.found += np.count_nonzero(predicted)
+                # if tag == 1:
+                #     self.should_find += 1
+                # if predicted == tag and predicted == 1:
+                #     self.correct += 1
+                # if predicted == 1:
+                #     self.found += 1
         return found_anomaly
 
     def process_video(self, video_name, tag_video):
@@ -136,7 +150,7 @@ class UCSDTest:
             bins[...,number_frame % self.detect_interval] = binno
             mag[..., number_frame % self.detect_interval] = magnitude
             if number_frame % self.detect_interval == 0:
-                found_anomaly = self.process_frame(bins, mag, frameCopy, tag_img)
+                found_anomaly = self.process_frame(bins, mag, fmask, tag_img, frameCopy)
                 if found_anomaly:
                     anomaly_detected.append(number_frame)
             cv2.imshow('frame', frameCopy)
@@ -157,8 +171,8 @@ if __name__ == '__main__':
     total_should_found = 0.0
     total_found = 0.0
     for directory in dir_test:
-        print directory
         if not directory.endswith("gt"):
+            print directory
             start_time = time.time()
             anomaly_detected = ucsd_test.process_video(directory+'/', directory + '_gt/')
             time_video = passed_time(start_time)

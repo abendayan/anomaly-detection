@@ -16,49 +16,49 @@ class UCSD:
         self.features = []
         self.labels = []
 
-    def process_frame(self, bins, magnitude, fmask, out, tag_image = None):
+    def process_frame(self, bins, magnitude, frame, out, tag_image, fmask):
         bin_count = np.zeros(9, np.uint8)
         h,w, t = bins.shape
         features_j = []
         labels_j = []
-        for i in range(0, h, self.n):
-            for j in range(0, w, self.n):
-                i_end = min(h, i+self.n)
-                j_end = min(w, j+self.n)
+        if np.count_nonzero(fmask) > 0:
+            for i in range(0, h, self.n):
+                if np.count_nonzero(fmask[i]) > 0:
+                    for j in range(0, w, self.n):
+                        i_end = min(h, i+self.n)
+                        j_end = min(w, j+self.n)
+                        if np.count_nonzero(fmask[i:i_end, j:j_end]):
 
-                # Get the atom for bins
-                atom_bins = bins[i:i_end, j:j_end].flatten()
+                            # Get the atom for bins
+                            atom_bins = bins[i:i_end, j:j_end].flatten()
 
-                # Average magnitude
-                atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
-                atom_fmask = fmask[i:i_end, j:j_end].flatten()
+                            # Average magnitude
+                            atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
+                            atom_fmask = frame[i:i_end, j:j_end].flatten()
 
-                # Count of foreground values
-                f_cnt = np.count_nonzero(atom_fmask)
+                            # Count of foreground values
+                            f_cnt = np.count_nonzero(atom_fmask)
 
-                # Get the direction bins values
-                hs, _ = np.histogram(atom_bins, np.arange(10))
+                            # Get the direction bins values
+                            hs, _ = np.histogram(atom_bins, np.arange(10))
 
-                # get the tag atom
-                # tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                #print(tag_atom)
-                if tag_image is None:
-                    tag = 0
-                else:
-                    tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                    ones = np.count_nonzero(tag_atom)
-                    zeroes = len(tag_atom) - ones
-                    tag = 1
-                    # print ones
-                    if ones < 50:
-                        tag = 0
-                features = hs.tolist()
-                features.extend([f_cnt, atom_mag, i, j, tag])
-                features_j.append(features[:-1])
-                labels_j.append(tag)
-                for f in features:
-                    out.write(str(f) + " ")
-                out.write("\n")
+                            # get the tag atom
+                            # tag_atom = tag_image[i:i_end, j:j_end].flatten()
+                            #print(tag_atom)
+                            tag_atom = tag_image[i:i_end, j:j_end].flatten()
+                            ones = np.count_nonzero(tag_atom)
+                            zeroes = len(tag_atom) - ones
+                            tag = 1
+                            # print ones
+                            if ones < 50:
+                                tag = 0
+                            features = hs.tolist()
+                            features.extend([f_cnt, atom_mag, i, j, tag])
+                            features_j.append(features[:-1])
+                            labels_j.append(tag)
+                            for f in features:
+                                out.write(str(f) + " ")
+                            out.write("\n")
         return features_j, labels_j
 
     def extract_features(self, video_name, type, tag_video = ""):
@@ -111,12 +111,9 @@ class UCSD:
             bins[...,number_frame % self.detect_interval] = binno
             mag[..., number_frame % self.detect_interval] = magnitude
             if number_frame % self.detect_interval == 0:
-                if is_tagged:
-                    feat, label = self.process_frame(bins, mag, frameCopy, out, tag_img)
-                    self.features.extend(feat)
-                    self.labels.extend(label)
-                else:
-                    self.process_frame(bins, mag, frameCopy, out)
+                feat, label = self.process_frame(bins, mag, frameCopy, out, tag_img, fmask)
+                self.features.extend(feat)
+                self.labels.extend(label)
             cv2.imshow('frame', frameCopy)
             number_frame += 1
             old_frame = frame
@@ -143,7 +140,7 @@ def load_train_features(type):
 
 if __name__ == '__main__':
     ucsdped = 'UCSDped1'
-    ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', 10, 5)
+    ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', 10, 1)
     dir_trains = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', f))]
     dir_tests = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
     dir_trains.sort()
@@ -165,6 +162,6 @@ if __name__ == '__main__':
                 ucsd_training.extract_features(directory+'/', ucsdped)
 
     x_train, target = load_train_features(ucsdped)
-    learning = VideoLearn(13, 5, 0.001)
+    learning = VideoLearn(13, 50, 0.001)
 
-    learning.learn(x_train, target, 50)
+    learning.learn(x_train, target, 10)

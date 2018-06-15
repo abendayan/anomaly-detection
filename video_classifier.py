@@ -10,7 +10,6 @@ from UCSDped1 import TestVideoFile
 from sklearn.neighbors import KNeighborsClassifier
 from model import VideoClassifier
 import time
-from foreground_objects_features import *
 
 def draw_str(dst, target, s):
     x, y = target
@@ -23,131 +22,68 @@ def passed_time(previous_time):
 class UCSDTest:
     def __init__(self, path, n, detect_interval, type):
         self.path = path
+        self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
-        # self.clf = DecisionTreeClassifier(max_depth=5)
-        # self.clf = KNeighborsClassifier(3)
-        # self.load_train_features(type)
         self.classifier = VideoClassifier()
         self.true_positive = 0.0
         self.false_positive = 0.0
         self.false_negative = 0.0
         self.should_find = 0.0
 
-    def load_train_features(self, type):
-        x_train = []
-        y_train = []
-        features = [f for f in listdir('features/') if f.startswith("features_test_"+type)]
-        for feature in features:
-            file = open('features/' + feature, "r")
-            feature_text = file.read().split("\n")
-            for f in feature_text:
-                if f!= "":
-                    feat_all = [float(feat) for feat in f.split(" ")[:-1]]
-                    x_train.append(feat_all[:-1])
-                    y_train.append(int(feat_all[-1]))
-        # self.clf.fit(x_train, y_train)
-
-    def process_frame(self, bins, magnitude, frame, tag_image, fmask):
+    def process_frame(self, bins, magnitude, fmask, tag_img, frame):
+        if np.count_nonzero(fmask) == 0:
+            return False
         bin_count = np.zeros(9, np.uint8)
-        h,w, t = bins.shape
+        h,w = bins.shape
         found_anomaly = False
         features_j = []
         tag_j = []
         index_i_j = []
-        h,w, t = bins.shape
-        features_j = []
-        labels_j = []
-        if np.count_nonzero(fmask) > 0:
-            for i in range(0, h, self.n):
-                if np.count_nonzero(fmask[i]) > 0:
-                    for j in range(0, w, self.n):
-                        i_end = min(h, i+self.n)
-                        j_end = min(w, j+self.n)
-                        if np.count_nonzero(fmask[i:i_end, j:j_end]):
+        for i in range(0, h, self.n):
+            i_end = min(h, i+self.n)
+            if np.count_nonzero(fmask[i]) > 0:
+                for j in range(0, w, self.n):
+                    j_end = min(w, j+self.n)
+                    if np.count_nonzero(fmask[i:i_end, j:j_end]) > 0:
+                        # Get the atom for bins
+                        atom_bins = bins[i:i_end, j:j_end].flatten()
 
-                            # Get the atom for bins
-                            atom_bins = bins[i:i_end, j:j_end].flatten()
+                        # Average magnitude
+                        atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
+                        atom_fmask = fmask[i:i_end, j:j_end].flatten()
 
-                            # Average magnitude
-                            atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
-                            atom_fmask = fmask[i:i_end, j:j_end].flatten()
+                        # Count of foreground values
+                        f_cnt = np.count_nonzero(atom_fmask)
 
-                            # Count of foreground values
-                            f_cnt = np.count_nonzero(atom_fmask)
-
-                            # Get the direction bins values
-                            hs, _ = np.histogram(atom_bins, np.arange(10))
-
-                            # get the tag atom
-                            # tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                            #print(tag_atom)
-                            tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                            ones = np.count_nonzero(tag_atom)
-                            zeroes = len(tag_atom) - ones
-                            tag = 1
-                            # print ones
-                            if ones < 50:
-                                tag = 0
-                            features = hs.tolist()
-                            features.extend([f_cnt, atom_mag, h, w, i, j, tag])
-                            features_j.append(features[:-1])
-                            labels_j.append(tag)
-                            index_i_j.append((i, j, i_end, j_end))
-        # kernel = np.ones((2,2),np.uint8)
-        # heights_in_good_contours = [[] for _ in xrange(0,5)]
-        # widths_in_good_contours = [[] for _ in xrange(0,5)]
-        # perimeters = [[] for _ in xrange(0,5)]
-        # areas = [[] for _ in xrange(0,5)]
-        # tags = [[] for _ in xrange(0,5)]
-        # for i in xrange(0,5):
-        #     if not regions[i]:
-        #         return features_j, labels_j
-        #     for tup in regions[i]:
-        #         cnt = tup[0]
-        #         a = cv2.contourArea(cnt)
-        #         x, y, w, h = tup[1]
-        #         if a > 6:
-        #             tag_atom = tag_image[y:y+h, x:x+w].flatten()
-        #             ones = np.count_nonzero(tag_atom)
-        #             tag = 1
-        #             if ones < 50:
-        #                 tag = 0
-        #             heights_in_good_contours[i].append(h)
-        #             widths_in_good_contours[i].append(w)
-        #             perimeters[i].append(cv2.arcLength(cnt, True))
-        #             areas[i].append(a)
-        #             # Get the atom for bins
-        #             atom_bins = bins[y:y+h, x:x+w].flatten()
-        #
-        #             # Average magnitude
-        #             atom_mag = magnitude[y:y+h, x:x+w].flatten().mean()
-        #             atom_fmask = frame[y:y+h, x:x+w].flatten()
-        #
-        #             # Count of foreground values
-        #             f_cnt = np.count_nonzero(atom_fmask)
-        #
-        #             # Get the direction bins values
-        #             hs, _ = np.histogram(atom_bins, np.arange(10))
-        #             features = hs.tolist()
-        #             features.extend([f_cnt, atom_mag, perimeters[i][0], areas[i][0], tag])
-        #             features_j.append(features[:-1])
-        #             labels_j.append(tag)
-        #             index_i_j.append((x,y, x+w, y+h))
-
-        predicted, true_positive = self.classifier.predict(features_j, labels_j)
+                        # Get the direction bins values
+                        hs, _ = np.histogram(atom_bins, np.arange(10))
+                        features = hs.tolist()
+                        features.extend([f_cnt, atom_mag, i, j])
+                        features_j.append(features)
+                        # vector = np.array(features)
+                        tag_atom = tag_img[i:i_end, j:j_end].flatten()
+                        ones = np.count_nonzero(tag_atom)
+                        tag = 1
+                        if ones < 50:
+                            tag = 0
+                        tag_j.append(tag)
+                        index_i_j.append((i,j))
+        predicted = self.classifier.predict(features_j, tag_j)
         # self.true_positive += true_positive
         for index, pred in enumerate(predicted):
             pred = pred.item()
             if pred == 1:
-                if labels_j[index] == 0:
+                if tag_j[index] == 0:
                     self.false_positive += 1
                 else:
                     self.true_positive += 1
-                i, j, i_end, j_end  = index_i_j[index]
+                i, j = index_i_j[index]
+                j_end = min(w, j+self.n)
+                i_end = min(h, i+self.n)
                 cv2.rectangle(frame, (j, i), (j_end, i_end), (255, 0, 0), 2)
                 found_anomaly = True
-            elif labels_j[index] == 1:
+            elif tag_j[index] == 1:
                 self.false_negative += 1
                 # if tag == 1:
                 #     self.should_find += 1
@@ -181,22 +117,16 @@ class UCSDTest:
         h, w = old_frame.shape[:2]
         bins = np.zeros((h, w, self.detect_interval), np.uint8)
         mag = np.zeros((h, w, self.detect_interval), np.float32)
-        # fmask = np.zeros((h, w, self.detect_interval), np.uint8)
+        fmask = np.zeros((h, w, self.detect_interval), np.uint8)
         frames = np.zeros((h, w, self.detect_interval), np.uint8)
         tag_img = np.zeros((h,w,self.n), np.uint8)
         anomaly_detected = []
         for tif in files:
             movement = 0
-            frame = cv2.imread(self.path + video_name + tif)
-            foreground = get_foreground(frame, video_name.split('/')[1], tif)
-            contours = get_contours(foreground)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-            # fmask[...,number_frame % self.detect_interval] = self.fgbg.apply(frame)
-            frameCopy = frame.copy()
+            frame = cv2.imread(self.path + video_name + tif, cv2.IMREAD_GRAYSCALE)
+            fmask = self.fgbg.apply(frame)
             flow = cv2.calcOpticalFlowFarneback(old_frame, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            tag_img_ = cv2.imread(self.path + tag_video + files_tag[number_frame] ,cv2.IMREAD_GRAYSCALE)
-            tag_img[...,number_frame % self.detect_interval] = tag_img_
+            tag_img = cv2.imread(self.path + tag_video + files_tag[number_frame] ,cv2.IMREAD_GRAYSCALE)
             # Calculate direction and magnitude
             height, width = flow.shape[:2]
             fx, fy = flow[:,:,0], flow[:,:,1]
@@ -204,13 +134,13 @@ class UCSDTest:
             binno = np.ceil(angle/45)
             magnitude = np.sqrt(fx*fx+fy*fy)
             binno[magnitude < mag_threshold] = 0
-            bins[...,number_frame % self.detect_interval] = binno
-            mag[..., number_frame % self.detect_interval] = magnitude
-            if number_frame % self.detect_interval == 0:
-                found_anomaly = self.process_frame(bins, mag, frameCopy, tag_img, foreground)
-                if found_anomaly:
-                    anomaly_detected.append(number_frame)
-            cv2.imshow('frame', frameCopy)
+            bins = binno
+            mag = magnitude
+            # if number_frame % self.detect_interval == 0:
+            found_anomaly = self.process_frame(bins, mag, fmask, tag_img, frame)
+            if found_anomaly:
+                anomaly_detected.append(number_frame)
+            cv2.imshow('frame', frame)
             number_frame += 1
             old_frame = frame
             k = cv2.waitKey(30) & 0xff
@@ -227,7 +157,6 @@ if __name__ == '__main__':
     total_correct = 0.0
     total_should_found = 0.0
     total_found = 0.0
-    dir_test = [dir_test[0]]
     for directory in dir_test:
         if not directory.endswith("gt"):
             print directory

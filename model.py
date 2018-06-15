@@ -19,19 +19,20 @@ class Regression(nn.Module):
     def __init__(self, input_dim, output):
         super(Regression, self).__init__()
         hidden = int(input_dim/2)
-        self.fc1 = nn.Linear(input_dim, input_dim-2)
-        # self.fc1 = nn.Linear(input_dim, 2)
+        # self.fc1 = nn.Linear(input_dim, input_dim-2)
+        # self.fc1 = nn.Linear(input_dim, input_dim-2)
+        self.fc1 = nn.Linear(input_dim, 2)
         self.fc2 = nn.Linear(input_dim-2, hidden)
         # self.fc3 = nn.Linear(hidden, output)
         # self.batchNorm = nn.BatchNorm1d(hidden)
 
     def forward(self, inputs):
-        out1 =  F.relu(self.fc1(inputs))
+        # out1 =  F.relu(self.fc1(inputs))
         # out = F.relu(self.fc1(inputs))
         # out = F.relu(self.fc2(out))
         # out = self.fc3(out)
-        out2 = self.fc2(out1)
-        return out2
+        # out2 = self.fc2(out1)
+        return self.fc1(inputs)
         # return out
 
 def data_to_images_labels(inputs, labels):
@@ -89,7 +90,7 @@ class VideoLearn():
 
 class VideoClassifier():
     def __init__(self):
-        self.model = Regression(15, 2)
+        self.model = Regression(13, 2)
         self.model.load_state_dict(torch.load('video_extract.pt'))
         if torch.cuda.is_available():
             self.model.to(device)
@@ -103,4 +104,4 @@ class VideoClassifier():
         # y = autograd.Variable(by, requires_grad=False)
         outputs = self.model(x)
         _, predicted = torch.max(outputs.data, 1)
-        return predicted, (predicted == by.long()).sum().item()
+        return predicted

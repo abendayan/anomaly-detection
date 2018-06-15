@@ -29,8 +29,9 @@ class UCSDTest:
         # self.clf = KNeighborsClassifier(3)
         # self.load_train_features(type)
         self.classifier = VideoCLassifier()
-        self.correct = 0.0
-        self.found = 0.0
+        self.true_positive = 0.0
+        self.false_positive = 0.0
+        self.false_negative = 0.0
         self.should_find = 0.0
 
     def load_train_features(self, type):
@@ -85,17 +86,22 @@ class UCSDTest:
                             tag = 0
                         tag_j.append(tag)
                         index_i_j.append((i,j))
-        predicted, correct_t = self.classifier.predict(features_j, tag_j)
-        self.correct += correct_t
+        predicted, true_positive = self.classifier.predict(features_j, tag_j)
+        # self.true_positive += true_positive
         for index, pred in enumerate(predicted):
             pred = pred.item()
             if pred == 1:
+                if tag_j[index] == 0:
+                    self.false_positive += 1
+                else:
+                    self.true_positive += 1
                 i, j = index_i_j[index]
                 j_end = min(w, j+self.n)
                 i_end = min(h, i+self.n)
                 cv2.rectangle(frame, (j, i), (j_end, i_end), (255, 0, 0), 2)
                 found_anomaly = True
-        self.found += np.count_nonzero(predicted)
+            elif tag_j[index] == 1:
+                self.false_negative += 1
                 # if tag == 1:
                 #     self.should_find += 1
                 # if predicted == tag and predicted == 1:
@@ -181,10 +187,6 @@ if __name__ == '__main__':
             index_video = int(directory[-3:])
             total_correct += len(set(anomaly_detected).intersection(TestVideoFile[index_video]))
             total_should_found += len(TestVideoFile[index_video])
-
-    total_correct_pixel = ucsd_test.correct
-    total_should_found_pixel = ucsd_test.should_find
-    total_found_pixel = ucsd_test.found
     precision = total_correct/total_found
     recall = total_correct/total_should_found
     f1 = 2.0*precision*recall/(precision+recall)
@@ -193,8 +195,11 @@ if __name__ == '__main__':
     print "Recall: ", recall
     print "F1: ", f1
     print "Results pixel wise:"
-    precision = total_correct_pixel/total_found_pixel
-    recall = total_correct_pixel/total_should_found_pixel
+    pixel_true_positive = ucsd_test.true_positive
+    pixel_false_positive = ucsd_test.false_positive
+    pixel_false_negative = ucsd_test.false_negative
+    precision = pixel_true_positive/(pixel_true_positive + pixel_false_positive)
+    recall = pixel_true_positive/(pixel_true_positive + pixel_false_negative)
     f1 = 2.0*precision*recall/(precision+recall)
     print "Precision: ", precision
     print "Recall: ", recall

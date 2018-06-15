@@ -35,23 +35,19 @@ def compute_size_in_cell(matrix, focus, row, col):
     sum += (focus-1) * matrix[row][col]
     return sum
 
-
-
 def get_background():
-    b_up =cv2.imread('/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train011/200.tif')
-    b_down=cv2.imread('/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train010/200.tif')
+    b_up =cv2.imread('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train011/200.tif')
+    b_down=cv2.imread('UCSD_Anomaly_Dataset.v1p2/UCSDped1/Train/Train010/200.tif')
     new_up = b_up[0:73]
     new_down = b_down[73:]
     return np.concatenate((new_up,new_down))
 
-def get_foreground(img_name):
-    img = cv2.imread(img_name)
+def get_foreground(img, img_name, dir_name):
     foreground = cv2.absdiff(img, background)
-    img_name = os.path.basename(img_name)
-    cv2.imwrite('Test001-foreground/{}'.format(img_name), foreground)
+    cv2.imwrite('{}-foreground/{}'.format(dir_name, img_name), foreground)
     img_grey = cv2.cvtColor(foreground, cv2.COLOR_BGR2GRAY)
     ret, thresh = cv2.threshold(img_grey, threshold_grayscale, 255, cv2.THRESH_BINARY)
-    cv2.imwrite('Test001-thresh/{}'.format(img_name), thresh)
+    cv2.imwrite('{}-thresh/{}'.format(dir_name, img_name), thresh)
     return thresh
 
 def get_cells_pixels(img):
@@ -170,8 +166,7 @@ def get_tag(folder,img_name,x,y,w,h):
     frame_num=img_name.split(".")[0]
     # check if any of the pixels within bounding rectangle is white - if so, tag as 1
     # else tag as 0
-    groundtruth_img_name = '/Users/eva/Documents/AnomalyDetectionData/' \
-                      'UCSD_Anomaly_Dataset.v1p2/UCSDped1/{}_gt/{}.bmp'.format(folder,frame_num)
+    groundtruth_img_name = 'UCSD_Anomaly_Dataset.v1p2/UCSDped1/{}_gt/{}.bmp'.format(folder,frame_num)
     groundtruth_img = cv2.imread(groundtruth_img_name)
     for i in xrange(y,y+h):
         for j in xrange(x,x+w):
@@ -192,64 +187,63 @@ def write_features(features):
     with open(outfile, 'w') as f:
         json.dump(features, f)
 
-
-kernel = np.ones((2,2),np.uint8)
-heights_in_good_contours = []
-widths_in_good_contours = []
-perimeters = []
-areas = []
-tags = []
-for i in xrange(0, 5):
-    widths_in_good_contours.append([])
-    heights_in_good_contours.append([])
-    tags.append([])
-    perimeters.append([])
-    areas.append([])
-
-train_folders = ["Test/Test003", "Test/Test004", "Test/Test014", "Test/Test018", "Test/Test019", "Test/Test021", "Test/Test022",
-      "Test/Test023", "Test/Test024", "Test/Test032"]
-
-for folder in train_folders:
-    for f in glob.glob(r'/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/'
-                       r'UCSDped1/{}/*'.format(folder)):
-        img = cv2.imread(f)
-        img_name = os.path.basename(f)
-        foreground = get_foreground(f)
-        #closing = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, kernel)
-        #dilation = cv2.dilate(foreground, kernel, iterations=1)
-        contours = get_contours(foreground)
-        find_humans_according_to_area(folder,img,img_name,sort_contours_by_region(contours))
-
-        # areas = []
-        # perimeters = []
-        # i = 0
-        # for cnt in contours:
-        #     a = cv2.contourArea(cnt)
-        #     if a > 0:
-        #         areas.append(a)
-        #     p = cv2.arcLength(cnt, True)
-        #     if p > 0:
-        #         perimeters.append(p)
-        #     #if a > 20 and p > 0:
-        #     cv2.drawContours(img, [cnt], 0, (255, 0, 0), 1)
-        #
-        #filename = os.path.basename(f)
-        #cv2.imwrite('Test003-output/{}'.format(filename),img)
-        # print areas
-        # print 'average',sum(areas)/len(areas)
-        # print perimeters
-        # print 'average',sum(perimeters)/len(perimeters)
-
-
-# merge all lists
-import itertools
-all_heights = list(itertools.chain.from_iterable(heights_in_good_contours))
-all_widths = list(itertools.chain.from_iterable(widths_in_good_contours))
-all_areas = list(itertools.chain.from_iterable(areas))
-all_perimeters = list(itertools.chain.from_iterable(perimeters))
-all_tags = list(itertools.chain.from_iterable(tags))
-
-features = map(lambda x,y,w,z:[x,y,w,z],all_heights,all_widths,all_areas,all_perimeters)
-write_features(features)
-write_tag(np.array(all_tags))
-
+#
+# kernel = np.ones((2,2),np.uint8)
+# heights_in_good_contours = []
+# widths_in_good_contours = []
+# perimeters = []
+# areas = []
+# tags = []
+# for i in xrange(0, 5):
+#     widths_in_good_contours.append([])
+#     heights_in_good_contours.append([])
+#     tags.append([])
+#     perimeters.append([])
+#     areas.append([])
+#
+# train_folders = ["Test/Test003", "Test/Test004", "Test/Test014", "Test/Test018", "Test/Test019", "Test/Test021", "Test/Test022",
+#       "Test/Test023", "Test/Test024", "Test/Test032"]
+#
+# for folder in train_folders:
+#     for f in glob.glob(r'/Users/eva/Documents/AnomalyDetectionData/UCSD_Anomaly_Dataset.v1p2/'
+#                        r'UCSDped1/{}/*'.format(folder)):
+#         img = cv2.imread(f)
+#         img_name = os.path.basename(f)
+#         foreground = get_foreground(f)
+#         #closing = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, kernel)
+#         #dilation = cv2.dilate(foreground, kernel, iterations=1)
+#         contours = get_contours(foreground)
+#         find_humans_according_to_area(folder,img,img_name,sort_contours_by_region(contours))
+#
+#         # areas = []
+#         # perimeters = []
+#         # i = 0
+#         # for cnt in contours:
+#         #     a = cv2.contourArea(cnt)
+#         #     if a > 0:
+#         #         areas.append(a)
+#         #     p = cv2.arcLength(cnt, True)
+#         #     if p > 0:
+#         #         perimeters.append(p)
+#         #     #if a > 20 and p > 0:
+#         #     cv2.drawContours(img, [cnt], 0, (255, 0, 0), 1)
+#         #
+#         #filename = os.path.basename(f)
+#         #cv2.imwrite('Test003-output/{}'.format(filename),img)
+#         # print areas
+#         # print 'average',sum(areas)/len(areas)
+#         # print perimeters
+#         # print 'average',sum(perimeters)/len(perimeters)
+#
+#
+# # merge all lists
+# import itertools
+# all_heights = list(itertools.chain.from_iterable(heights_in_good_contours))
+# all_widths = list(itertools.chain.from_iterable(widths_in_good_contours))
+# all_areas = list(itertools.chain.from_iterable(areas))
+# all_perimeters = list(itertools.chain.from_iterable(perimeters))
+# all_tags = list(itertools.chain.from_iterable(tags))
+#
+# features = map(lambda x,y,w,z:[x,y,w,z],all_heights,all_widths,all_areas,all_perimeters)
+# write_features(features)
+# write_tag(np.array(all_tags))

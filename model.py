@@ -19,19 +19,19 @@ class Regression(nn.Module):
     def __init__(self, input_dim, output):
         super(Regression, self).__init__()
         hidden = int(input_dim/2)
-        # self.fc1 = nn.Linear(input_dim, input_dim-2)
-        self.fc1 = nn.Linear(input_dim, 2)
-        # self.fc2 = nn.Linear(input_dim-2, hidden)
+        self.fc1 = nn.Linear(input_dim, input_dim-2)
+        # self.fc1 = nn.Linear(input_dim, 2)
+        self.fc2 = nn.Linear(input_dim-2, hidden)
         # self.fc3 = nn.Linear(hidden, output)
         # self.batchNorm = nn.BatchNorm1d(hidden)
 
     def forward(self, inputs):
-        # out1 = self.fc(inputs)
+        out1 =  F.relu(self.fc1(inputs))
         # out = F.relu(self.fc1(inputs))
         # out = F.relu(self.fc2(out))
         # out = self.fc3(out)
-        # out2 = self.linear(out1)
-        return self.fc1(inputs)
+        out2 = self.fc2(out1)
+        return out2
         # return out
 
 def data_to_images_labels(inputs, labels):
@@ -41,7 +41,7 @@ def data_to_images_labels(inputs, labels):
 
 class VideoLearn():
     def __init__(self, input_size, batch_size, lr = 0.01):
-        self.model = Regression(13, 2)
+        self.model = Regression(input_size, 2)
         self.batch_size = batch_size
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -83,20 +83,20 @@ class VideoLearn():
                 detected_anomaly += np.count_nonzero(predicted)
                 total_anomaly += np.count_nonzero(batch_y)
                 correct += (predicted == batch_y.long()).sum().item()
-            print "epoch", "accuracy", "loss", "detected anomaly", "total anomaly", "difference learned"
+            print "epoch;", "accuracy;", "loss;", "detected anomaly;", "total anomaly;", "difference learned"
             print epoch, correct/total, running_loss/total, detected_anomaly, total_anomaly, detected_anomaly - total_anomaly
         torch.save(self.model.state_dict(), 'video_extract.pt')
 
-class VideoCLassifier():
+class VideoClassifier():
     def __init__(self):
-        self.model = Regression(13, 2)
+        self.model = Regression(15, 2)
         self.model.load_state_dict(torch.load('video_extract.pt'))
         if torch.cuda.is_available():
             self.model.to(device)
 
     def predict(self, input_data, label):
         test = Data.TensorDataset(torch.FloatTensor(input_data), torch.FloatTensor(label))
-        test_loader = Data.DataLoader(test, 1)
+        test_loader = Data.DataLoader(test, batch_size=2)
         bx, by = test_loader.dataset.tensors
         bx, by = data_to_images_labels(bx, by)
         x = autograd.Variable(bx)

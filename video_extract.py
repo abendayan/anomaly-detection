@@ -6,62 +6,63 @@ from os import listdir
 from os.path import isfile, join, isdir
 import random
 from model import VideoLearn
+import os
+from foreground_objects_features import *
 
 class UCSD:
     def __init__(self, path, n, detect_interval):
         self.path = path
-        self.fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
         self.n = n
         self.detect_interval = detect_interval
         self.features = []
         self.labels = []
 
-    def process_frame(self, bins, magnitude, frame, out, tag_image, fmask):
+    def process_frame(self, bins, magnitude, frame, out, tag_image, fmask, regions):
         bin_count = np.zeros(9, np.uint8)
-        h,w, t = bins.shape
         features_j = []
         labels_j = []
+        h,w, t = bins.shape
         if np.count_nonzero(fmask) > 0:
             for i in range(0, h, self.n):
-                if np.count_nonzero(fmask[i]) > 0:
-                    for j in range(0, w, self.n):
-                        i_end = min(h, i+self.n)
-                        j_end = min(w, j+self.n)
-                        if np.count_nonzero(fmask[i:i_end, j:j_end]):
+                # if np.count_nonzero(fmask[i]) > 0:
+                for j in range(0, w, self.n):
+                    i_end = min(h, i+self.n)
+                    j_end = min(w, j+self.n)
+                    if np.count_nonzero(fmask[i:i_end, j:j_end]):
 
-                            # Get the atom for bins
-                            atom_bins = bins[i:i_end, j:j_end].flatten()
+                        # Get the atom for bins
+                        atom_bins = bins[i:i_end, j:j_end].flatten()
 
-                            # Average magnitude
-                            atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
-                            atom_fmask = frame[i:i_end, j:j_end].flatten()
+                        # Average magnitude
+                        atom_mag = magnitude[i:i_end, j:j_end].flatten().mean()
+                        atom_fmask = fmask[i:i_end, j:j_end].flatten()
 
-                            # Count of foreground values
-                            f_cnt = np.count_nonzero(atom_fmask)
+                        # Count of foreground values
+                        f_cnt = np.count_nonzero(atom_fmask)
 
-                            # Get the direction bins values
-                            hs, _ = np.histogram(atom_bins, np.arange(10))
+                        # Get the direction bins values
+                        hs, _ = np.histogram(atom_bins, np.arange(10))
 
-                            # get the tag atom
-                            # tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                            #print(tag_atom)
-                            tag_atom = tag_image[i:i_end, j:j_end].flatten()
-                            ones = np.count_nonzero(tag_atom)
-                            zeroes = len(tag_atom) - ones
-                            tag = 1
-                            # print ones
-                            if ones < 50:
-                                tag = 0
-                            features = hs.tolist()
-                            features.extend([f_cnt, atom_mag, i, j, tag])
-                            features_j.append(features[:-1])
-                            labels_j.append(tag)
-                            for f in features:
-                                out.write(str(f) + " ")
-                            out.write("\n")
+                        # get the tag atom
+                        # tag_atom = tag_image[i:i_end, j:j_end].flatten()
+                        #print(tag_atom)
+                        tag_atom = tag_image[i:i_end, j:j_end].flatten()
+                        ones = np.count_nonzero(tag_atom)
+                        zeroes = len(tag_atom) - ones
+                        tag = 1
+                        # print ones
+                        if ones < 50:
+                            tag = 0
+                        features = hs.tolist()
+                        features.extend([f_cnt, atom_mag, h, w, i, j, tag])
+                        features_j.append(features[:-1])
+                        labels_j.append(tag)
+                        for f in features:
+                            out.write(str(f) + " ")
+                        out.write("\n")
         return features_j, labels_j
 
-    def extract_features(self, video_name, type, tag_video = ""):
+    def extract_features(self, video_name, type, tag_video):
         mag_threshold=1e-3
         elements = 0
         is_tagged = not tag_video == ""
@@ -88,14 +89,30 @@ class UCSD:
         h, w = old_frame.shape[:2]
         bins = np.zeros((h, w, self.detect_interval), np.uint8)
         mag = np.zeros((h, w, self.detect_interval), np.float32)
-        fmask = np.zeros((h, w, self.detect_interval), np.uint8)
+        # fmask = np.zeros((h, w, self.detect_interval), np.uint8)
         frames = np.zeros((h, w, self.detect_interval), np.uint8)
-        if is_tagged:
-            tag_img = np.zeros((h,w,self.n), np.uint8)
+        tag_img = np.zeros((h,w,self.n), np.uint8)
+        kernel = np.ones((2,2),np.uint8)
+        heights_in_good_contours = []
+        widths_in_good_contours = []
+        perimeters = []
+        areas = []
+        tags = []
+        for i in xrange(0, 5):
+            widths_in_good_contours.append([])
+            heights_in_good_contours.append([])
+            tags.append([])
+            perimeters.append([])
+            areas.append([])
+
         for tif in files:
             movement = 0
-            frame = cv2.imread(self.path + video_name + tif, cv2.IMREAD_GRAYSCALE)
-            fmask[...,number_frame % self.detect_interval] = self.fgbg.apply(frame)
+            frame = cv2.imread(self.path + video_name + tif)
+            foreground = get_foreground(frame, video_name.split('/')[1], tif)
+            contours = get_contours(foreground)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # fmask[...,number_frame % self.detect_interval] = self.fgbg.apply(frame)
             frameCopy = frame.copy()
             flow = cv2.calcOpticalFlowFarneback(old_frame, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
             if is_tagged:
@@ -111,7 +128,7 @@ class UCSD:
             bins[...,number_frame % self.detect_interval] = binno
             mag[..., number_frame % self.detect_interval] = magnitude
             if number_frame % self.detect_interval == 0:
-                feat, label = self.process_frame(bins, mag, frameCopy, out, tag_img, fmask)
+                feat, label = self.process_frame(bins, mag, frameCopy, out, tag_img, foreground, sort_contours_by_region(contours))
                 self.features.extend(feat)
                 self.labels.extend(label)
             cv2.imshow('frame', frameCopy)
@@ -162,6 +179,6 @@ if __name__ == '__main__':
                 ucsd_training.extract_features(directory+'/', ucsdped)
 
     x_train, target = load_train_features(ucsdped)
-    learning = VideoLearn(13, 50, 0.001)
+    learning = VideoLearn(15, 50, 0.001)
 
-    learning.learn(x_train, target, 10)
+    learning.learn(x_train, target, 20)

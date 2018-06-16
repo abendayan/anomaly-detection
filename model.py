@@ -22,8 +22,9 @@ class Regression(nn.Module):
         self.fc1 = nn.Linear(input_dim, input_dim-2)
         # self.fc1 = nn.Linear(input_dim, input_dim-2)
         # self.fc1 = nn.Linear(input_dim, 2)
-        self.fc2 = nn.Linear(input_dim-2, output)
+        self.fc2 = nn.Linear(input_dim-2, hidden)
         # self.fc3 = nn.Linear(hidden, output)
+        self.fc3 = nn.Linear(hidden, output)
         # self.batchNorm = nn.BatchNorm1d(hidden)
 
     def forward(self, inputs):
@@ -31,9 +32,9 @@ class Regression(nn.Module):
         # out = F.relu(self.fc1(inputs))
         # out = F.relu(self.fc2(out))
         # out = self.fc3(out)
-        out2 = self.fc2(out1)
+        out2 = F.relu(self.fc2(out1))
         # return self.fc1(inputs)
-        return out2
+        return self.fc3(out2)
 
 def data_to_images_labels(inputs, labels):
     if torch.cuda.is_available():

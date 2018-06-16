@@ -141,28 +141,28 @@ def load_train_features(type):
 
 if __name__ == '__main__':
     ucsdped = 'UCSDped1'
-    # ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', 10, 1)
-    # dir_trains = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', f))]
-    # dir_tests = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
-    # dir_trains.sort()
-    # # out = open("features_test_UCSDped1.txt","w")
-    # # ucsd_training.extract_features('Train001/', ucsdped)
-    # dir_trains.pop(0)
+    ucsd_training = UCSD('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', 10, 1)
+    dir_trains = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Train/', f))]
+    dir_tests = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
+    dir_trains.sort()
+    # out = open("features_test_UCSDped1.txt","w")
+    # ucsd_training.extract_features('Train001/', ucsdped)
+    dir_trains.pop(0)
+
+    # li = ["Test/Test003"]
+    li = ["Test/Test003","Test/Test004","Test/Test014","Test/Test018","Test/Test019", "Test/Test021","Test/Test022","Test/Test023","Test/Test024","Test/Test032"]
+    ucsd_training.path = 'UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/'
+    for directory in li:
+        print directory
+        if not directory.endswith("gt"):
+            dir_split = directory.split("/")[1]
+            dir_split = dir_split + '_gt'
+            if dir_split in dir_tests:
+                ucsd_training.extract_features(directory+'/', ucsdped, directory + '_gt/')
+            else:
+                ucsd_training.extract_features(directory+'/', ucsdped)
+
+    # x_train, target = load_train_features(ucsdped)
+    # learning = VideoLearn(16, 5, 0.001)
     #
-    # # li = ["Test/Test003"]
-    # li = ["Test/Test003","Test/Test004","Test/Test014","Test/Test018","Test/Test019", "Test/Test021","Test/Test022","Test/Test023","Test/Test024","Test/Test032"]
-    # ucsd_training.path = 'UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/'
-    # for directory in li:
-    #     print directory
-    #     if not directory.endswith("gt"):
-    #         dir_split = directory.split("/")[1]
-    #         dir_split = dir_split + '_gt'
-    #         if dir_split in dir_tests:
-    #             ucsd_training.extract_features(directory+'/', ucsdped, directory + '_gt/')
-    #         else:
-    #             ucsd_training.extract_features(directory+'/', ucsdped)
-
-    x_train, target = load_train_features(ucsdped)
-    learning = VideoLearn(16, 5, 0.001)
-
-    learning.learn(x_train, target, 3)
+    # learning.learn(x_train, target, 10)

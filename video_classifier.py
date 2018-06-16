@@ -53,7 +53,7 @@ class UCSDTest:
         if np.count_nonzero(fmask) == 0:
             return False
         bin_count = np.zeros(9, np.uint8)
-        h,w,t = bins.shape
+        h,w = bins.shape
         found_anomaly = False
         features_j = []
         tag_j = []
@@ -93,12 +93,12 @@ class UCSDTest:
         # self.true_positive += true_positive
         for index, pred in enumerate(predicted):
             pred = pred.item()
+            i, j = index_i_j[index]
             if pred == 1:
                 if tag_j[index] == 0:
                     self.false_positive += 1
                 else:
                     self.true_positive += 1
-                i, j = index_i_j[index]
                 j_end = min(w, j+self.n)
                 i_end = min(h, i+self.n)
                 cv2.rectangle(frame, (j, i), (j_end, i_end), (255, 0, 0), 2)
@@ -144,22 +144,23 @@ class UCSDTest:
         for tif in files:
             movement = 0
             frame = cv2.imread(self.path + video_name + tif, cv2.IMREAD_GRAYSCALE)
-            fmask = self.fgbg.apply(frame)
-            flow = cv2.calcOpticalFlowFarneback(old_frame, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            tag_img = cv2.imread(self.path + tag_video + files_tag[number_frame] ,cv2.IMREAD_GRAYSCALE)
-            # Calculate direction and magnitude
-            height, width = flow.shape[:2]
-            fx, fy = flow[:,:,0], flow[:,:,1]
-            angle = ((np.arctan2(fy, fx+1) + 2*np.pi)*180)% 360
-            binno = np.ceil(angle/45)
-            magnitude = np.sqrt(fx*fx+fy*fy)
-            binno[magnitude < mag_threshold] = 0
-            bins[...,number_frame % self.detect_interval] = binno
-            mag[..., number_frame % self.detect_interval] = magnitude
-            # if number_frame % self.detect_interval == 0:
-            found_anomaly = self.process_frame(bins, mag, fmask, tag_img, frame)
-            if found_anomaly:
-                anomaly_detected.append(number_frame)
+            if number_frame % self.detect_interval == 0:
+                fmask = self.fgbg.apply(frame)
+                flow = cv2.calcOpticalFlowFarneback(old_frame, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                tag_img = cv2.imread(self.path + tag_video + files_tag[number_frame] ,cv2.IMREAD_GRAYSCALE)
+                # Calculate direction and magnitude
+                height, width = flow.shape[:2]
+                fx, fy = flow[:,:,0], flow[:,:,1]
+                angle = ((np.arctan2(fy, fx+1) + 2*np.pi)*180)% 360
+                binno = np.ceil(angle/45)
+                magnitude = np.sqrt(fx*fx+fy*fy)
+                binno[magnitude < mag_threshold] = 0
+                bins = binno
+                mag = magnitude
+                # if number_frame % self.detect_interval == 0:
+                found_anomaly = self.process_frame(bins, mag, fmask, tag_img, frame)
+                if found_anomaly:
+                    anomaly_detected.append(number_frame)
             cv2.imshow('frame', frame)
             number_frame += 1
             old_frame = frame

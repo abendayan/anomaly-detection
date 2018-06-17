@@ -99,9 +99,13 @@ class UCSDTest:
                         # vector = np.array(features)
                         tag_atom = tag_img[i:i_end, j:j_end].flatten()
                         ones = np.count_nonzero(tag_atom)
-                        tag = 1
-                        if ones < 50:
+                        if ones > 20:
+                            tag = 1
+                        else:
                             tag = 0
+                        # tag = 1
+                        # if ones < 50:
+                        #     tag = 0
                         tag_j.append(tag)
                         index_i_j.append((i,j))
         predicted = self.clf.predict(features_j, tag_j)
@@ -228,6 +232,8 @@ if __name__ == '__main__':
     print eer
     print "RD by pixel"
     print 1-eer
+    print "True positive: ", pixel_true_positive
+    print "False positive: ", pixel_false_positive
     precision = pixel_true_positive/(pixel_true_positive + pixel_false_positive)
     recall = pixel_true_positive/(pixel_true_positive + pixel_false_negative)
     f1 = 2.0*precision*recall/(precision+recall)

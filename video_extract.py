@@ -49,10 +49,13 @@ class UCSD:
                             tag_atom = tag_image[i:i_end, j:j_end].flatten()
                             ones = np.count_nonzero(tag_atom)
                             zeroes = len(tag_atom) - ones
-                            tag = 1
-                            # print ones
-                            if ones < 50:
+                            if ones > 20:
+                                tag = 1
+                            else:
                                 tag = 0
+                            # tag = 1
+                            # if ones < 50:
+                            #     tag = 0
                             features = hs.tolist()
                             features.extend([f_cnt, f_cnt_2, atom_mag, i, i+self.n, j, j+self.n, tag])
                             features_j.append(features[:-1])

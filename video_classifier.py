@@ -99,13 +99,13 @@ class UCSDTest:
                         # vector = np.array(features)
                         tag_atom = tag_img[i:i_end, j:j_end].flatten()
                         ones = np.count_nonzero(tag_atom)
-                        if ones > 20:
-                            tag = 1
-                        else:
-                            tag = 0
-                        # tag = 1
-                        # if ones < 50:
+                        # if ones > 20:
+                        #     tag = 1
+                        # else:
                         #     tag = 0
+                        tag = 1
+                        if ones < 50:
+                            tag = 0
                         tag_j.append(tag)
                         index_i_j.append((i,j))
         predicted = self.clf.predict(features_j, tag_j)

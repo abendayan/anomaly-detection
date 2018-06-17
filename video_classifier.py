@@ -195,7 +195,7 @@ class UCSDTest:
 
 if __name__ == '__main__':
     ucsdped = 'UCSDped1'
-    ucsd_test = UCSDTest('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', 10, 1, ucsdped)
+    ucsd_test = UCSDTest('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', 10, 5, ucsdped)
     dir_test = [f for f in listdir('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/') if isdir(join('UCSD_Anomaly_Dataset.v1p2/'+ucsdped+'/Test/', f))]
     dir_test.sort()
     total_correct = 0.0

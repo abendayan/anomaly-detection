@@ -10,6 +10,10 @@ from UCSDped1 import TestVideoFile
 from sklearn.neighbors import KNeighborsClassifier
 from model import VideoClassifier
 import time
+from sklearn.metrics import roc_curve, auc
+from scipy.interpolate import interp1d
+from scipy.optimize import brentq
+
 
 def draw_str(dst, target, s):
     x, y = target
@@ -34,6 +38,15 @@ def load_train_features(type):
 
     return x_train, np.array(y_train)
 
+def compute_roc_EER(fpr, tpr):
+    roc_EER = []
+    cords = zip(fpr, tpr)
+    for item in cords:
+        item_fpr, item_tpr = item
+        if item_tpr + item_fpr == 1.0:
+            roc_EER.append((item_fpr, item_tpr))
+    assert(len(roc_EER) == 1.0)
+    return np.array(roc_EER)
 class UCSDTest:
     def __init__(self, path, n, detect_interval, type):
         self.path = path
@@ -48,6 +61,9 @@ class UCSDTest:
         self.false_positive = 0.0
         self.false_negative = 0.0
         self.should_find = 0.0
+        self.total = 0.0
+        self.y = []
+        self.y_pred = []
 
     def process_frame(self, bins, magnitude, fmask, tag_img, frame):
         if np.count_nonzero(fmask) == 0:
@@ -89,6 +105,9 @@ class UCSDTest:
                         tag_j.append(tag)
                         index_i_j.append((i,j))
         predicted = self.clf.predict(features_j, tag_j)
+        self.y_pred.extend(predicted)
+        self.y.extend(tag_j)
+        self.total += len(predicted)
         # predicted = self.classifier.predict(features_j, tag_j)
         # self.true_positive += true_positive
         for index, pred in enumerate(predicted):
@@ -178,6 +197,7 @@ if __name__ == '__main__':
     total_correct = 0.0
     total_should_found = 0.0
     total_found = 0.0
+    # dir_test = [dir_test[0]]
     for directory in dir_test:
         if not directory.endswith("gt"):
             print directory
@@ -200,6 +220,14 @@ if __name__ == '__main__':
     pixel_true_positive = ucsd_test.true_positive
     pixel_false_positive = ucsd_test.false_positive
     pixel_false_negative = ucsd_test.false_negative
+    pixel_total = ucsd_test.total
+    fpr, tpr, threshold = roc_curve(ucsd_test.y, ucsd_test.y_pred, pos_label=1)
+    fnr = 1 - tpr
+    eer = brentq(lambda x : 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    print "EER by pixel"
+    print eer
+    print "RD by pixel"
+    print 1-eer
     precision = pixel_true_positive/(pixel_true_positive + pixel_false_positive)
     recall = pixel_true_positive/(pixel_true_positive + pixel_false_negative)
     f1 = 2.0*precision*recall/(precision+recall)
